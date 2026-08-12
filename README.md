@@ -17,7 +17,7 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
   2. 인증 상태(JWT Token)에 따른 페이지 라우팅 및 접근 제어 (`/chat` 보호)
   3. Google GenAI SDK 기반 AI API 연동 및 최근 3개 대화 기반 Context 구성
   4. 질문/응답의 DB (`chat_logs`) 자동 축적 및 사용자별 이력 조회
-  5. 서버 사이드 로깅, 재시도(retry) 처리로 AI 호출 실패 시 시스템 비정상 종료 방지
+  5. 서버 사이드 로깅, 하드 타임아웃(5초) 및 재시도(retry) 처리로 AI 호출 지연/실패 시 시스템 비정상 종료 방지
 
 ---
 
@@ -51,13 +51,12 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 - DB에서 해당 사용자의 최근 3개 대화 기록을 추출해 모델에 전달하는 Prompt Context 구성 로직 구현
 - 클라이언트측 API 키 노출 방지를 위해 모든 AI 호출은 백엔드 서버에서 수행하도록 격리
 
-### Step 5. 예외 처리, 로깅 작성
+### Step 5. 타임아웃, 예외 처리 및 로깅 작성
 
-- 재시도 가능한 오류(503 UNAVAILABLE, 429 RESOURCE_EXHAUSTED)에 대해 최대 3회 지수적 백오프(exponential backoff) 재시도를 적용하고, 최종 실패 시 서버가 다운되지 않고 클라이언트에 안내 에러 메시지를 반환하도록 예외 포착(`try-except`) 처리
-- 요청 수신, AI 호출 시작/성공/실패, DB 저장 유무를 기록하는 서버 로깅(`logging`, `app_logger`) 추가
+- `asyncio.wait_for`로 AI API 호출에 **5초 하드 타임아웃(`TIMEOUT_SECONDS`)**을 적용해, 응답이 지연되는 상황에서도 서버가 무한 대기하지 않도록 처리
+- 타임아웃 및 재시도 가능한 오류(503 UNAVAILABLE, 429 RESOURCE_EXHAUSTED)에 대해 최대 3회 지수적 백오프(exponential backoff) 재시도를 적용하고, 최종 실패 시 서버가 다운되지 않고 클라이언트에 안내 에러 메시지를 반환하도록 예외 포착(`try-except`) 처리
+- 요청 수신, AI 호출 시작/성공/실패(타임아웃 포함), DB 저장 유무를 기록하는 서버 로깅(`logging`, `app_logger`) 추가
 - `GET /api/me/chats` 이력 조회 API 완성
-
-> 📌 **TODO (팀 프로젝트 단계에서 보완 예정)**: 현재는 재시도 로직만 구현되어 있고, AI 호출 자체에 대한 명시적 하드 타임아웃(예: `asyncio.wait_for`)은 아직 적용되지 않았습니다. API가 응답 없이 지연되는 상황에 대한 방어 로직을 추가할 예정입니다.
 
 ---
 
@@ -74,7 +73,7 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 [ FastAPI Server (main.py) ]
 ├──── Auth Module (auth.py) ──────── Password Hash (PBKDF2) & JWT Verification
 ├──── Input Validation (Pydantic) ── Length limit & Empty check
-├──── AI Service (ai_service.py) ─── Google GenAI SDK (gemini-3.6-flash)
+├──── AI Service (ai_service.py) ─── Google GenAI SDK (gemini-3.6-flash), 5s hard timeout
 └──── Database Layer (database.py) ─ SQLAlchemy ORM
         │
         ▼
@@ -87,7 +86,7 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 | --------------- | ------------------------------------------------------ |
 | `main.py`       | FastAPI 앱 엔트리포인트, HTML 라우터, REST API 엔드포인트, 로깅         |
 | `auth.py`       | PBKDF2 해싱, JWT 토큰 생성 및 토큰 검증 미들웨어 (`get_current_user`) |
-| `ai_service.py` | Google GenAI SDK 연동, 최근 대화 맥락(Context) 구성 및 예외/재시도 처리      |
+| `ai_service.py` | Google GenAI SDK 연동, 최근 대화 맥락(Context) 구성, 하드 타임아웃 및 재시도/예외 처리 |
 | `database.py`   | SQLite DB 엔진 연결 및 세션 관리 (`get_db`, `init_db`)          |
 | `models.py`     | SQLAlchemy ORM 스키마 정의 (`User`, `ChatLog`)              |
 | `templates/`    | 프론트엔드 UI (`login.html`, `register.html`, `chat.html`)  |
@@ -159,6 +158,15 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 {
   "question": "FastAPI의 장점이 뭐야?",
   "response": "FastAPI는 비동기 처리 지원, Pydantic 기반 입력 검증, 빠른 실행 속도가 장점입니다."
+}
+```
+
+- **Response (지연/오류 시, 200 OK 내 안내 메시지):**
+
+```json
+{
+  "question": "긴 글 요약해줘",
+  "response": "현재 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요. (error: AI_TIMEOUT)"
 }
 ```
 
@@ -299,7 +307,7 @@ curl -H "Authorization: Bearer <access_token>" http://127.0.0.1:8000/api/me/chat
 | 구분                 | 담당 영역          | 예정 작업 내용                                           |
 | ------------------ | -------------- | -------------------------------------------------- |
 | **팀원 A (PoC 작성자)** | 시스템 아키텍처 & 백엔드 | 프로토타입 구축, 핵심 API 라우팅, DB ORM 연동 및 전체 아키텍처 수립       |
-| **팀원 B**           | AI 연동 & 예외 처리  | AI 호출 하드 타임아웃 추가, Prompt 커스텀 기능 추가, 재시도/오류 처리 고도화    |
+| **팀원 B**           | AI 연동 & 예외 처리  | Prompt 커스텀 기능 추가, 재시도/백오프 전략 고도화, 타임아웃 임계값 튜닝    |
 | **팀원 C**           | 인증 & 보안        | JWT Refresh Token 도입, 토큰 만료 예외 처리, 비정상 접근 차단 보안 강화 |
 | **팀원 D**           | 프론트엔드 UI/UX    | UI 스타일링 개선, 대화 로딩 애니메이션 추가, 반응형 웹 디자인 적용           |
 
@@ -316,7 +324,7 @@ main (최종 배포용)
   │
   └── develop (기능 개발 통합용)
         ├── feat/auth (인증/보안 - 팀원 C)
-        ├── feat/ai-timeout (AI 하드 타임아웃 적용 - 팀원 B, 2번 항목 TODO 대응)
+        ├── feat/ai-retry-tuning (재시도/백오프 전략 고도화 - 팀원 B)
         └── feat/ui-redesign (프론트엔드 - 팀원 D)
 ```
 
@@ -351,4 +359,4 @@ git checkout -b feat/login-ui
 - [ ] `main`/`develop` 브랜치 분리 및 기능 단위 작업 브랜치 운영
 - [ ] PR 기반 Merge 워크플로우 적용
 - [ ] 팀원별 유의미한 커밋 10회 이상 기록
-- [ ] AI 호출에 대한 명시적 하드 타임아웃 적용
+- [x] AI 호출에 대한 명시적 하드 타임아웃 적용 (`asyncio.wait_for`, 5초)

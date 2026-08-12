@@ -1,7 +1,7 @@
 # AI 파이프라인, Context, Timeout 구현
 # ai_service.py: AI API 호출 시 타임아웃 핸들링, 문맥 유지(최근 N개 대화), 에러 처리를 담당하는 핵심 로직
 
-# Google GenAI 공식 SDK 기반 연동, 문맥 유지 및 예외 처리
+# Google GenAI 공식 SDK 기반 연동, 문맥 유지, 하드 타임아웃, 재시도 및 예외 처리
 
 import os
 import asyncio
@@ -15,10 +15,12 @@ logger = logging.getLogger("uvicorn.error")
 
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
+TIMEOUT_SECONDS = 5.0  # 명시적 하드 타임아웃 설정 (초)
 
 async def get_ai_response(prompt: str, history_logs: list) -> str:
     """
     최근 N개의 대화 기록을 포함하여 Google Gemini API를 호출합니다.
+    5초 하드 타임아웃 및 재시도(Retry) 로직이 적용되어 있습니다.
     """
     load_dotenv(override=True)
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -56,17 +58,31 @@ async def get_ai_response(prompt: str, history_logs: list) -> str:
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            response = await client.aio.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction="너는 친절하고 유용한 AI 보조원이야.",
-                )
+            response = await asyncio.wait_for(
+                client.aio.models.generate_content(
+                    model="gemini-3.6-flash",
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction="너는 친절하고 유용한 AI 보조원이야.",
+                    )
+                ),
+                timeout=TIMEOUT_SECONDS
             )
 
             ai_text = response.text
             logger.info("ai_call_success")
             return ai_text
+
+        except asyncio.TimeoutError:
+            logger.error(f"ai_call_failed attempt={attempt} reason=timeout")
+
+            if attempt < MAX_RETRIES:
+                wait_time = RETRY_DELAY_SECONDS * attempt
+                logger.info(f"ai_call_retry attempt={attempt} wait={wait_time}s")
+                await asyncio.sleep(wait_time)
+                continue
+
+            return "현재 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요. (error: AI_TIMEOUT)"
 
         except errors.APIError as e:
             # 503(UNAVAILABLE), 429(RESOURCE_EXHAUSTED) 등 재시도 가능한 오류 처리

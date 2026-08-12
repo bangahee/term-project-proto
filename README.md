@@ -290,8 +290,6 @@ INFO: 127.0.0.1:52151 - "POST /api/chat HTTP/1.1" 200 OK
 curl -H "Authorization: Bearer <access_token>" http://127.0.0.1:8000/api/me/chats
 ```
 
-> 📌 별도의 DB 확인용 SQL 스크립트(`scripts/check_logs.sql`)는 아직 작성되지 않았습니다. 필요 시 `sqlite3 chatbot.db "SELECT * FROM chat_logs;"` 형태로 직접 조회하거나, 팀 프로젝트 단계에서 검증 스크립트를 추가할 예정입니다.
-
 ---
 
 ## 9. 팀 협업 및 역할 분담 계획 (Team Roadmap)
@@ -307,11 +305,50 @@ curl -H "Authorization: Bearer <access_token>" http://127.0.0.1:8000/api/me/chat
 
 ---
 
-## 10. 남은 작업 (본 프로젝트 착수 시 필수)
+## 10. 팀 브랜치 전략 및 Git 워크플로우 (Git Flow Strategy)
+
+본 프로젝트는 안정적인 메인 코드 관리와 팀원 간 작업 충돌 방지를 위해 **Git Flow에 준하는 브랜치 전략을 채택할 예정입니다.** 모든 기능 개발은 작업 브랜치에서 진행하며, **PR(Pull Request) 검토 후 `develop` 브랜치로 머지**하는 것을 원칙으로 합니다.
+
+> ⚠️ 현재는 PoC 단계로 `main` 브랜치만 존재합니다. 아래 구조는 팀 프로젝트 착수 시점부터 적용됩니다.
+
+```text
+main (최종 배포용)
+  │
+  └── develop (기능 개발 통합용)
+        ├── feat/auth (인증/보안 - 팀원 C)
+        ├── feat/ai-timeout (AI 하드 타임아웃 적용 - 팀원 B, 2번 항목 TODO 대응)
+        └── feat/ui-redesign (프론트엔드 - 팀원 D)
+```
+
+### 10.1 브랜치 구조 및 역할
+
+| 브랜치 명칭 | 역할 및 사용 목적 | 머지 조건 |
+| --- | --- | --- |
+| `main` | 외부 배포가 가능한 최신 상태의 프로덕션 브랜치 | 최종 검증 후 머지 |
+| `develop` | 팀원들의 기능 개발 결과물이 하나로 합쳐지는 통합 브랜치 | PR 승인 후 머지 |
+| `feat/<기능명>` | 각 팀원이 담당 기능을 개발하는 기능 단위 작업 브랜치 | `develop` 방향으로 PR 작성 |
+| `fix/<버그명>` | 긴급 버그 수정 작업 브랜치 | `develop` 방향으로 PR 작성 |
+
+### 10.2 팀 협업 규칙 (Git Rules)
+
+1. **직접 Commit 금지**: `main` 및 `develop` 브랜치에 직접 커밋 및 푸시하는 것을 금지합니다.
+2. **작업 브랜치 생성**: 기능 개발 시 항상 `develop` 브랜치에서 새로운 작업 브랜치를 생성합니다.
+
+```bash
+git checkout develop
+git pull origin develop
+git checkout -b feat/login-ui
+```
+
+3. **PR 기반 Merge**: 기능 구현 완료 후 GitHub에서 `develop` 브랜치로 PR을 작성하고, 팀원 코드 리뷰를 거친 후 머지합니다.
+4. **커밋 단위 세분화**: 기능을 작은 단위로 나누어 커밋함으로써 변경 이력 추적과 코드 리뷰를 쉽게 합니다. 이 원칙을 따르면 팀원별 커밋도 자연히 여러 건 누적됩니다.
+
+---
+
+## 11. 남은 작업 (본 프로젝트 착수 시 필수)
 
 - [ ] 외부 네트워크에서 접속 가능한 서비스 배포 (배포 URL 확보)
 - [ ] `main`/`develop` 브랜치 분리 및 기능 단위 작업 브랜치 운영
 - [ ] PR 기반 Merge 워크플로우 적용
 - [ ] 팀원별 유의미한 커밋 10회 이상 기록
 - [ ] AI 호출에 대한 명시적 하드 타임아웃 적용
-- [ ] DB 검증용 스크립트(`scripts/check_logs.sql`) 작성 또는 해당 섹션 제거

@@ -1,21 +1,23 @@
 # 🤖 웹 기반 AI 챗봇 서비스 PoC (Term Project Prototype)
 
-FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 문맥 유지, 대화 이력 DB 저장을 지원하는 웹 AI 챗봇 서비스의 기능 검증용 프로토타입(PoC)**입니다. 
+FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 문맥 유지, 대화 이력 DB 저장을 지원하는 웹 AI 챗봇 서비스의 기능 검증용 프로토타입(PoC)**입니다.
 
 팀 프로젝트 본격 착수 전, 백엔드 라우팅부터 DB 연동, 인증, AI API 호출 및 예외 처리까지의 전체 파이프라인이 유기적으로 동작함을 입증하기 위해 선제적으로 제작되었습니다.
+
+> ⚠️ **현재 단계 안내**: 본 문서는 단일 작성자가 진행한 PoC 단계를 기술한 것입니다. 배포(외부 접속 URL), 브랜치 전략, PR 기반 협업, 팀원별 커밋 이력은 팀 본 프로젝트 착수 이후 별도로 진행/기록됩니다.
 
 ---
 
 ## 1. 프로젝트 개요 및 PoC 목적
 
-* **개발 목적**: 팀원들과의 역할 분담 및 본격 개발에 앞서, **Linux + Web (FastAPI) + DB (SQLite) + AI API (Gemini)** 통합 파이프라인의 핵심 기술 요소를 미리 구현하고 검증
-* **타겟 사용자**: 개인화된 대화 기록을 보관하고 연속성 있는 AI 대화를 진행하고자 하는 웹 사용자
-* **핵심 기능**:
+- **개발 목적**: 팀원들과의 역할 분담 및 본격 개발에 앞서, **Linux + Web (FastAPI) + DB (SQLite) + AI API (Gemini)** 통합 파이프라인의 핵심 기술 요소를 미리 구현하고 검증
+- **타겟 사용자**: 개인화된 대화 기록을 보관하고 연속성 있는 AI 대화를 진행하고자 하는 웹 사용자
+- **핵심 기능**:
   1. PBKDF2 암호화 및 JWT 기반의 회원가입/로그인 인증
   2. 인증 상태(JWT Token)에 따른 페이지 라우팅 및 접근 제어 (`/chat` 보호)
   3. Google GenAI SDK 기반 AI API 연동 및 최근 3개 대화 기반 Context 구성
   4. 질문/응답의 DB (`chat_logs`) 자동 축적 및 사용자별 이력 조회
-  5. 서버 사이드 로깅, 타임아웃, 예외 처리로 시스템 비정상 종료 방지
+  5. 서버 사이드 로깅, 재시도(retry) 처리로 AI 호출 실패 시 시스템 비정상 종료 방지
 
 ---
 
@@ -24,31 +26,38 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 이 프로토타입은 아래 5단계에 걸쳐 순차적으로 구축되었습니다.
 
 ### Step 1. 개발 환경 설정 및 DB ORM 구축
-* Python 가상환경(`.venv`) 구성 및 필수 패키지(`fastapi`, `uvicorn`, `sqlalchemy`, `google-genai`, `python-jose`, `passlib` 등) 설치
-* `database.py`에 SQLAlchemy 엔진과 세션 관리 로직 작성
-* `models.py`에 사용자 테이블(`User`)과 대화 로그 테이블(`ChatLog`) 1:N 관계 정의
+
+- Python 가상환경(`.venv`) 구성 및 필수 패키지(`fastapi`, `uvicorn`, `sqlalchemy`, `google-genai`, `python-jose`, `passlib` 등) 설치
+- `database.py`에 SQLAlchemy 엔진과 세션 관리 로직 작성
+- `models.py`에 사용자 테이블(`User`)과 대화 로그 테이블(`ChatLog`) 1:N 관계 정의
 
 ### Step 2. 인증 모듈 및 보안 체계 구현
-* `auth.py` 작성: 비밀번호 저장 시 `passlib`의 PBKDF2 해싱 적용
-* JWT Access Token 발급(`create_access_token`) 및 API 요청 헤더 토큰 검증 함수(`get_current_user`) 작성
-* 환경 변수(`.env`) 기반 `SECRET_KEY` 및 API 키 격리 관리 체계 구축 (`.gitignore` 적용)
+
+- `auth.py` 작성: 비밀번호 저장 시 `passlib`의 PBKDF2 해싱 적용
+- JWT Access Token 발급(`create_access_token`) 및 API 요청 헤더 토큰 검증 함수(`get_current_user`) 작성
+- 환경 변수(`.env`) 기반 `SECRET_KEY` 및 API 키 격리 관리 체계 구축 (`.gitignore` 적용)
 
 ### Step 3. 다중 페이지(Multi-Page) UI 및 라우터 설계
-* 단일 파일 구조에서 가독성 및 팀 협업 효율을 높이기 위해 HTML 템플릿 분리
-  * `templates/login.html`: 로그인 화면
-  * `templates/register.html`: 회원가입 화면
-  * `templates/chat.html`: 챗봇 메인 대화 화면
-* `main.py`에 HTML 페이지 렌더링 라우터(`GET /`, `/login`, `/register`, `/chat`)와 비즈니스 REST API 분리 구현
+
+- 단일 파일 구조에서 가독성 및 팀 협업 효율을 높이기 위해 HTML 템플릿 분리
+  - `templates/login.html`: 로그인 화면
+  - `templates/register.html`: 회원가입 화면
+  - `templates/chat.html`: 챗봇 메인 대화 화면 (클라이언트 측에서 토큰 부재 시 `/login`으로 리다이렉트)
+- `main.py`에 HTML 페이지 렌더링 라우터(`GET /`, `/login`, `/register`, `/chat`)와 비즈니스 REST API 분리 구현
 
 ### Step 4. AI API 연동 및 문맥(Context) 구성
-* `ai_service.py` 작성: `google-genai` SDK의 비동기 클라이언트(`client.aio.models.generate_content`) 연동
-* DB에서 해당 사용자의 최근 3개 대화 기록을 추출해 `gemini-1.5-flash` 모델에 전달하는 Prompt Context 구성 로직 구현
-* 클라이언트측 API 키 노출 방지를 위해 모든 AI 호출은 백엔드 서버에서 수행하도록 격리
 
-### Step 5. 예외 처리, 로깅 및 DB 검증 스크립트 작성
-* API 타임아웃 및 호출 실패 시 서버가 다운되지 않고 클라이언트에 안내 에러 메시지를 반환하도록 예외 포착(`try-except`) 처리
-* 요청 수신, AI 호출 시작/성공, DB 저장 유무를 기록하는 서버 로깅(`logging`, `app_logger`) 추가
-* 데이터 검증용 SQL 스크립트(`scripts/check_logs.sql`) 및 `GET /api/me/chats` 이력 조회 API 완성
+- `ai_service.py` 작성: `google-genai` SDK의 비동기 클라이언트(`client.aio.models.generate_content`) 연동, `gemini-3.6-flash` 모델 사용
+- DB에서 해당 사용자의 최근 3개 대화 기록을 추출해 모델에 전달하는 Prompt Context 구성 로직 구현
+- 클라이언트측 API 키 노출 방지를 위해 모든 AI 호출은 백엔드 서버에서 수행하도록 격리
+
+### Step 5. 예외 처리, 로깅 작성
+
+- 재시도 가능한 오류(503 UNAVAILABLE, 429 RESOURCE_EXHAUSTED)에 대해 최대 3회 지수적 백오프(exponential backoff) 재시도를 적용하고, 최종 실패 시 서버가 다운되지 않고 클라이언트에 안내 에러 메시지를 반환하도록 예외 포착(`try-except`) 처리
+- 요청 수신, AI 호출 시작/성공/실패, DB 저장 유무를 기록하는 서버 로깅(`logging`, `app_logger`) 추가
+- `GET /api/me/chats` 이력 조회 API 완성
+
+> 📌 **TODO (팀 프로젝트 단계에서 보완 예정)**: 현재는 재시도 로직만 구현되어 있고, AI 호출 자체에 대한 명시적 하드 타임아웃(예: `asyncio.wait_for`)은 아직 적용되지 않았습니다. API가 응답 없이 지연되는 상황에 대한 방어 로직을 추가할 예정입니다.
 
 ---
 
@@ -65,24 +74,23 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 [ FastAPI Server (main.py) ]
 ├──── Auth Module (auth.py) ──────── Password Hash (PBKDF2) & JWT Verification
 ├──── Input Validation (Pydantic) ── Length limit & Empty check
-├──── AI Service (ai_service.py) ─── Google GenAI SDK (gemini-1.5-flash)
+├──── AI Service (ai_service.py) ─── Google GenAI SDK (gemini-3.6-flash)
 └──── Database Layer (database.py) ─ SQLAlchemy ORM
         │
         ▼
-[ SQLite DB (app.db) ]
+[ SQLite DB (chatbot.db) ]
 ```
 
 ### 3.2 주요 컴포넌트 역할
 
-| 파일명 | 역할 및 주요 기능 |
-| :--- | :--- |
-| `main.py` | FastAPI 앱 엔트리포인트, HTML 라우터, REST API 엔드포인트, 로깅 |
-| `auth.py` | PBKDF2 해싱, JWT 토큰 생성 및 토큰 검증 미들웨어 (`get_current_user`) |
-| `ai_service.py` | Google GenAI SDK 연동, 최근 대화 맥락(Context) 구성 및 예외 처리 |
-| `database.py` | SQLite DB 엔진 연결 및 세션 관리 (`get_db`, `init_db`) |
-| `models.py` | SQLAlchemy ORM 스키마 정의 (`User`, `ChatLog`) |
-| `templates/` | 프론트엔드 UI (`login.html`, `register.html`, `chat.html`) |
-| `scripts/` | DB 데이터 검증용 SQL 스크립트 (`check_logs.sql`) |
+| 파일명             | 역할 및 주요 기능                                             |
+| --------------- | ------------------------------------------------------ |
+| `main.py`       | FastAPI 앱 엔트리포인트, HTML 라우터, REST API 엔드포인트, 로깅         |
+| `auth.py`       | PBKDF2 해싱, JWT 토큰 생성 및 토큰 검증 미들웨어 (`get_current_user`) |
+| `ai_service.py` | Google GenAI SDK 연동, 최근 대화 맥락(Context) 구성 및 예외/재시도 처리      |
+| `database.py`   | SQLite DB 엔진 연결 및 세션 관리 (`get_db`, `init_db`)          |
+| `models.py`     | SQLAlchemy ORM 스키마 정의 (`User`, `ChatLog`)              |
+| `templates/`    | 프론트엔드 UI (`login.html`, `register.html`, `chat.html`)  |
 
 ---
 
@@ -92,7 +100,8 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 
 #### 1) 회원가입 (`POST /api/auth/register`)
 
-* **Request Body:**
+- **Request Body:**
+
 ```json
 {
   "username": "testuser",
@@ -100,7 +109,8 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 }
 ```
 
-* **Response (201 Created):**
+- **Response (201 Created):**
+
 ```json
 {
   "message": "회원가입 완료"
@@ -109,7 +119,8 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 
 #### 2) 로그인 (`POST /api/auth/login`)
 
-* **Request Body:**
+- **Request Body:**
+
 ```json
 {
   "username": "testuser",
@@ -117,7 +128,8 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 }
 ```
 
-* **Response (200 OK):**
+- **Response (200 OK):**
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1Ni...",
@@ -129,18 +141,20 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 
 ### 4.2 AI 챗봇 및 대화 이력 API (인증 필요)
 
-* **Common Header:** `Authorization: Bearer <access_token>`
+- **Common Header:** `Authorization: Bearer <access_token>`
 
 #### 1) 챗봇 질문 전송 (`POST /api/chat`)
 
-* **Request Body (Pydantic 검증 적용):**
+- **Request Body (Pydantic 검증 적용, 1~500자):**
+
 ```json
 {
   "question": "FastAPI의 장점이 뭐야?"
 }
 ```
 
-* **Response (200 OK):**
+- **Response (200 OK):**
+
 ```json
 {
   "question": "FastAPI의 장점이 뭐야?",
@@ -150,7 +164,8 @@ FastAPI와 Google Gemini API 기반으로 구현된 **사용자 인증, 대화 �
 
 #### 2) 내 대화 이력 조회 (`GET /api/me/chats`)
 
-* **Response (200 OK):**
+- **Response (200 OK):**
+
 ```json
 [
   {
@@ -188,7 +203,7 @@ API 키 및 JWT 암호화 키 등 민감정보는 `.env` 파일로 관리하며,
 
 ### `.env.example`
 
-```env
+```
 SECRET_KEY=your_secret_key_here
 ALGORITHM=HS256
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -196,7 +211,7 @@ GEMINI_API_KEY=your_gemini_api_key_here
 
 ### `.gitignore` 설정 내역
 
-```gitignore
+```
 # 환경 변수 파일
 .env
 
@@ -220,12 +235,14 @@ __pycache__/
 ## 7. 로컬 실행 가이드
 
 1. **저장소 클론:**
+
 ```bash
 git clone https://github.com/bangahee/term-project-proto.git
 cd term-project-proto
 ```
 
 2. **가상환경 생성 및 패키지 설치:**
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -233,25 +250,31 @@ pip install -r requirements.txt
 ```
 
 3. **환경 변수 설정:**
+
 ```bash
 cp .env.example .env
 # .env 파일에서 실제 GEMINI_API_KEY 및 SECRET_KEY 입력
 ```
 
 4. **FastAPI 서버 실행:**
+
 ```bash
 uvicorn main:app --reload
 ```
 
 5. **브라우저 접속:** `http://127.0.0.1:8000`
 
+> ⚠️ 현재는 로컬 실행 환경만 검증되었습니다. 외부 네트워크에서 접속 가능한 배포 URL은 팀 프로젝트 배포 단계에서 추가될 예정입니다.
+
 ---
 
-## 8. DB 검증 및 로그 확인 가이드
+## 8. 대화 로그 확인 가이드
+
+현재 대화 로그는 아래 방법으로 확인할 수 있습니다.
 
 ### 8.1 서버 로깅 예시
 
-```text
+```
 INFO:app_logger:request_received user_id=2 question=hi
 INFO:uvicorn.error:ai_call_start prompt_length=2
 INFO:uvicorn.error:ai_call_success
@@ -259,23 +282,36 @@ INFO:app_logger:db_save_success user_id=2 chat_id=12
 INFO: 127.0.0.1:52151 - "POST /api/chat HTTP/1.1" 200 OK
 ```
 
-### 8.2 DB 검증 SQL 실행
+### 8.2 API를 통한 로그 조회
 
-`scripts/check_logs.sql`을 실행하여 저장된 대화 로그를 직접 조회할 수 있습니다.
+인증 토큰으로 `GET /api/me/chats`를 호출하면 로그인한 사용자 기준의 전체 대화 이력(질문/응답/시간)을 JSON으로 확인할 수 있습니다.
 
 ```bash
-sqlite3 app.db < scripts/check_logs.sql
+curl -H "Authorization: Bearer <access_token>" http://127.0.0.1:8000/api/me/chats
 ```
+
+> 📌 별도의 DB 확인용 SQL 스크립트(`scripts/check_logs.sql`)는 아직 작성되지 않았습니다. 필요 시 `sqlite3 chatbot.db "SELECT * FROM chat_logs;"` 형태로 직접 조회하거나, 팀 프로젝트 단계에서 검증 스크립트를 추가할 예정입니다.
 
 ---
 
 ## 9. 팀 협업 및 역할 분담 계획 (Team Roadmap)
 
-본 프로토타입을 프로젝트 베이스라인으로 활용하여 진행할 팀원별 분담 영역입니다.
+본 프로토타입을 프로젝트 베이스라인으로 활용하여 진행할 **예정**인 팀원별 분담 영역입니다. (아래 항목은 실적이 아닌 계획이며, 실제 브랜치 전략·PR 이력·팀원별 커밋은 팀 프로젝트 착수 후 별도로 기록됩니다.)
 
-| 구분 | 담당 영역 | 예정 작업 내용 |
-| --- | --- | --- |
-| **팀원 A (PoC 작성자)** | 시스템 아키텍처 & 백엔드 | 프로토타입 구축, 핵심 API 라우팅, DB ORM 연동 및 전체 아키텍처 수립 |
-| **팀원 B** | AI 연동 & 예외 처리 | AI 모델 파라미터 튜닝, Prompt 커스텀 기능 추가, 타임아웃/오류 처리 고도화 |
-| **팀원 C** | 인증 & 보안 | JWT Refresh Token 도입, 토큰 만료 예외 처리, 비정상 접근 차단 보안 강화 |
-| **팀원 D** | 프론트엔드 UI/UX | UI 스타일링 개선, 대화 로딩 애니메이션 추가, 반응형 웹 디자인 적용 |
+| 구분                 | 담당 영역          | 예정 작업 내용                                           |
+| ------------------ | -------------- | -------------------------------------------------- |
+| **팀원 A (PoC 작성자)** | 시스템 아키텍처 & 백엔드 | 프로토타입 구축, 핵심 API 라우팅, DB ORM 연동 및 전체 아키텍처 수립       |
+| **팀원 B**           | AI 연동 & 예외 처리  | AI 호출 하드 타임아웃 추가, Prompt 커스텀 기능 추가, 재시도/오류 처리 고도화    |
+| **팀원 C**           | 인증 & 보안        | JWT Refresh Token 도입, 토큰 만료 예외 처리, 비정상 접근 차단 보안 강화 |
+| **팀원 D**           | 프론트엔드 UI/UX    | UI 스타일링 개선, 대화 로딩 애니메이션 추가, 반응형 웹 디자인 적용           |
+
+---
+
+## 10. 남은 작업 (본 프로젝트 착수 시 필수)
+
+- [ ] 외부 네트워크에서 접속 가능한 서비스 배포 (배포 URL 확보)
+- [ ] `main`/`develop` 브랜치 분리 및 기능 단위 작업 브랜치 운영
+- [ ] PR 기반 Merge 워크플로우 적용
+- [ ] 팀원별 유의미한 커밋 10회 이상 기록
+- [ ] AI 호출에 대한 명시적 하드 타임아웃 적용
+- [ ] DB 검증용 스크립트(`scripts/check_logs.sql`) 작성 또는 해당 섹션 제거

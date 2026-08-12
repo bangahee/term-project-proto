@@ -1,0 +1,16 @@
+# 환경 변수 파일
+.env
+
+# 데이터베이스 파일
+*.db
+*.sqlite3
+
+# 파이썬 가상환경 및 캐시
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+
+# OS 생성 임시 파일
+.DS_Store

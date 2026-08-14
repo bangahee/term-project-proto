@@ -74,13 +74,14 @@
         <h2>🔑 로그인</h2>
 
         <!--
-            form의 submit 이벤트를 사용하기 때문에
-            로그인 버튼 클릭뿐만 아니라 Enter 키로도 로그인할 수 있습니다.
+            form submit 방식을 사용하여
+            버튼 클릭과 Enter 키 모두 동일하게 로그인 실행
         -->
         <form id="login-form">
 
             <div class="form-group">
                 <label for="username">아이디</label>
+
                 <input
                     type="text"
                     id="username"
@@ -92,6 +93,7 @@
 
             <div class="form-group">
                 <label for="password">비밀번호</label>
+
                 <input
                     type="password"
                     id="password"
@@ -128,24 +130,24 @@
         // ------------------------------------------------------------
         // 로그인 Form Submit 이벤트
         //
-        // 버튼 클릭:
-        // form submit → login()
+        // 버튼 클릭 → form submit
+        // Enter 키   → form submit
         //
-        // Enter 키:
-        // form submit → login()
-        //
-        // 두 경우 모두 동일한 login() 함수를 실행합니다.
+        // 두 경우 모두 login() 함수를 실행합니다.
         // ------------------------------------------------------------
-        const loginForm = document.getElementById('login-form');
+        const loginForm =
+            document.getElementById('login-form');
 
-        loginForm.addEventListener('submit', async (event) => {
+        loginForm.addEventListener(
+            'submit',
+            async (event) => {
 
-            // 브라우저 기본 form 제출 동작 방지
-            // (페이지가 새로고침되는 것을 방지)
-            event.preventDefault();
+                // 브라우저 기본 form 제출 동작 방지
+                event.preventDefault();
 
-            await login();
-        });
+                await login();
+            }
+        );
 
 
         // ------------------------------------------------------------
@@ -154,10 +156,16 @@
         async function login() {
 
             const username =
-                document.getElementById('username').value.trim();
+                document
+                    .getElementById('username')
+                    .value
+                    .trim();
 
             const password =
-                document.getElementById('password').value.trim();
+                document
+                    .getElementById('password')
+                    .value
+                    .trim();
 
             const errorEl =
                 document.getElementById('error-msg');
@@ -165,20 +173,26 @@
             const loginBtn =
                 document.getElementById('login-btn');
 
+
+            // 이전 오류 메시지 초기화
             errorEl.innerText = '';
 
 
             // --------------------------------------------------------
-            // 클라이언트 측 입력 검증
+            // 클라이언트 측 기본 입력 검증
             // --------------------------------------------------------
             if (!username || !password) {
+
                 errorEl.innerText =
                     "아이디와 비밀번호를 모두 입력해 주세요.";
+
                 return;
             }
 
 
+            // --------------------------------------------------------
             // 로그인 요청 중 중복 요청 방지
+            // --------------------------------------------------------
             loginBtn.disabled = true;
             loginBtn.innerText = "로그인 중...";
 
@@ -188,37 +202,89 @@
                 // ----------------------------------------------------
                 // FastAPI 로그인 API 호출
                 // ----------------------------------------------------
-                const res = await fetch('/api/auth/login', {
-                    method: 'POST',
+                const res = await fetch(
+                    '/api/auth/login',
+                    {
+                        method: 'POST',
 
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
 
-                    body: JSON.stringify({
-                        username,
-                        password
-                    })
-                });
+                        body: JSON.stringify({
+                            username,
+                            password
+                        })
+                    }
+                );
 
 
                 const data = await res.json();
 
 
-                // 로그인 실패
+                // ----------------------------------------------------
+                // 로그인 실패 처리
+                //
+                // FastAPI의 detail은
+                // 문자열일 수도 있고
+                // Pydantic 검증 오류처럼 배열일 수도 있습니다.
+                //
+                // 배열을 그대로 Error에 넣으면
+                // [object Object]로 표시될 수 있으므로
+                // 사용자용 문자열로 변환합니다.
+                // ----------------------------------------------------
                 if (!res.ok) {
-                    throw new Error(
-                        data.detail || "로그인 실패"
-                    );
+
+                    let errorMessage =
+                        "로그인에 실패했습니다.";
+
+
+                    // 잘못된 아이디 / 비밀번호
+                    if (res.status === 401) {
+
+                        errorMessage =
+                            "아이디 또는 비밀번호가 올바르지 않습니다.";
+                    }
+
+
+                    // Pydantic Validation Error
+                    else if (res.status === 422) {
+
+                        if (
+                            Array.isArray(data.detail)
+                            && data.detail.length > 0
+                        ) {
+
+                            errorMessage = data.detail
+                                .map(error => error.msg)
+                                .join(", ");
+
+                        } else {
+
+                            errorMessage =
+                                "아이디와 비밀번호 형식을 확인해 주세요.";
+                        }
+                    }
+
+
+                    // 기타 FastAPI 문자열 오류
+                    else if (
+                        typeof data.detail === "string"
+                    ) {
+
+                        errorMessage =
+                            data.detail;
+                    }
+
+
+                    throw new Error(errorMessage);
                 }
 
 
                 // ----------------------------------------------------
                 // 로그인 성공
                 //
-                // FastAPI가 발급한 JWT Access Token을 저장합니다.
-                // 이후 /api/chat, /api/me/chats 요청에서
-                // Authorization Header에 사용됩니다.
+                // FastAPI가 발급한 JWT Access Token 저장
                 // ----------------------------------------------------
                 localStorage.setItem(
                     'token',
@@ -237,6 +303,7 @@
 
             } catch (err) {
 
+                // 사용자에게 오류 표시
                 errorEl.innerText =
                     err.message;
 

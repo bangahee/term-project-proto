@@ -4,62 +4,273 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>회원가입 - AI Chatbot</title>
+
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px; }
-        .card { border: 1px solid #ddd; border-radius: 8px; padding: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
-        .link { text-align: center; margin-top: 15px; font-size: 14px; }
-        .error { color: #dc3545; margin-top: 10px; font-size: 14px; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        .link {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        .error {
+            color: #dc3545;
+            margin-top: 10px;
+            font-size: 14px;
+        }
     </style>
 </head>
+
 <body>
+
     <div class="card">
         <h2>📝 회원가입</h2>
-        <div class="form-group">
-            <label>아이디</label>
-            <input type="text" id="username" placeholder="아이디 입력">
-        </div>
-        <div class="form-group">
-            <label>비밀번호</label>
-            <input type="password" id="password" placeholder="비밀번호 입력">
-        </div>
-        <button onclick="register()">가입하기</button>
+
+        <!--
+            form submit 방식을 사용하여
+            버튼 클릭과 Enter 키 모두 동일하게 회원가입 실행
+        -->
+        <form id="register-form">
+
+            <div class="form-group">
+                <label for="username">아이디</label>
+                <input
+                    type="text"
+                    id="username"
+                    placeholder="아이디 입력"
+                    autocomplete="username"
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password">비밀번호</label>
+                <input
+                    type="password"
+                    id="password"
+                    placeholder="비밀번호 입력"
+                    autocomplete="new-password"
+                    required
+                >
+            </div>
+
+            <button type="submit" id="register-btn">
+                가입하기
+            </button>
+
+        </form>
+
         <p id="error-msg" class="error"></p>
+
         <div class="link">
-            이미 계정이 있으신가요? <a href="/login">로그인하기</a>
+            이미 계정이 있으신가요?
+            <a href="/login">로그인하기</a>
         </div>
     </div>
 
+
     <script>
+        // ------------------------------------------------------------
+        // 회원가입 Form Submit 이벤트
+        //
+        // 버튼 클릭 → form submit
+        // Enter 키   → form submit
+        //
+        // 두 경우 모두 register() 함수 실행
+        // ------------------------------------------------------------
+        const registerForm = document.getElementById('register-form');
+
+        registerForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            await register();
+        });
+
+
+        // ------------------------------------------------------------
+        // 회원가입 처리
+        // ------------------------------------------------------------
         async function register() {
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value.trim();
-            const errorEl = document.getElementById('error-msg');
+
+            const username =
+                document.getElementById('username').value.trim();
+
+            const password =
+                document.getElementById('password').value.trim();
+
+            const errorEl =
+                document.getElementById('error-msg');
+
+            const registerBtn =
+                document.getElementById('register-btn');
+
             errorEl.innerText = '';
 
+
+            // --------------------------------------------------------
+            // 클라이언트 측 기본 입력 검증
+            // --------------------------------------------------------
             if (!username || !password) {
-                errorEl.innerText = "아이디와 비밀번호를 모두 입력해 주세요.";
+                errorEl.innerText =
+                    "아이디와 비밀번호를 모두 입력해 주세요.";
                 return;
             }
 
+
+            // --------------------------------------------------------
+            // 백엔드 Pydantic 조건과 동일한 최소 길이 사전 확인
+            // --------------------------------------------------------
+            if (username.length < 3) {
+                errorEl.innerText =
+                    "아이디는 3자 이상 입력해 주세요.";
+                return;
+            }
+
+            if (password.length < 4) {
+                errorEl.innerText =
+                    "비밀번호는 4자 이상 입력해 주세요.";
+                return;
+            }
+
+
+            // 중복 요청 방지
+            registerBtn.disabled = true;
+            registerBtn.innerText = "가입 중...";
+
+
             try {
+
+                // ----------------------------------------------------
+                // FastAPI 회원가입 API 호출
+                // ----------------------------------------------------
                 const res = await fetch('/api/auth/register', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.detail || "회원가입 실패");
 
-                alert("회원가입 성공! 로그인 페이지로 이동합니다.");
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+
+                    body: JSON.stringify({
+                        username,
+                        password
+                    })
+                });
+
+
+                const data = await res.json();
+
+
+                // ----------------------------------------------------
+                // 오류 응답 처리
+                //
+                // detail이 문자열일 수도 있고
+                // FastAPI/Pydantic 검증 오류처럼 배열일 수도 있으므로
+                // [object Object]가 표시되지 않도록 분기 처리
+                // ----------------------------------------------------
+                if (!res.ok) {
+
+                    let errorMessage =
+                        "회원가입에 실패했습니다.";
+
+                    if (res.status === 400) {
+                        errorMessage =
+                            typeof data.detail === "string"
+                                ? data.detail
+                                : "이미 존재하는 아이디입니다.";
+                    }
+
+                    else if (res.status === 422) {
+
+                        if (
+                            Array.isArray(data.detail)
+                            && data.detail.length > 0
+                        ) {
+                            errorMessage = data.detail
+                                .map(error => error.msg)
+                                .join(", ");
+                        } else {
+                            errorMessage =
+                                "입력 형식을 확인해 주세요.";
+                        }
+                    }
+
+                    else if (typeof data.detail === "string") {
+                        errorMessage = data.detail;
+                    }
+
+                    throw new Error(errorMessage);
+                }
+
+
+                // ----------------------------------------------------
+                // 회원가입 성공
+                // ----------------------------------------------------
+                alert(
+                    "회원가입 성공! 로그인 페이지로 이동합니다."
+                );
+
                 window.location.href = '/login';
+
+
             } catch (err) {
-                errorEl.innerText = err.message;
+
+                errorEl.innerText =
+                    err.message;
+
+
+            } finally {
+
+                registerBtn.disabled = false;
+                registerBtn.innerText = "가입하기";
             }
         }
     </script>
+
 </body>
 </html>

@@ -76,8 +76,15 @@ async def get_ai_response(prompt: str, history_logs: list) -> str:
         except asyncio.TimeoutError:
             logger.error(f"ai_call_failed attempt={attempt} reason=timeout")
 
+            # if attempt < MAX_RETRIES:
+            #     wait_time = RETRY_DELAY_SECONDS * attempt
+            #     logger.info(f"ai_call_retry attempt={attempt} wait={wait_time}s")
+            #     await asyncio.sleep(wait_time)
+            #     continue
+
             if attempt < MAX_RETRIES:
-                wait_time = RETRY_DELAY_SECONDS * attempt
+                # Exponential backoff: 2초 → 4초 → 8초 ...
+                wait_time = RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
                 logger.info(f"ai_call_retry attempt={attempt} wait={wait_time}s")
                 await asyncio.sleep(wait_time)
                 continue
@@ -91,8 +98,15 @@ async def get_ai_response(prompt: str, history_logs: list) -> str:
 
             logger.error(f"ai_call_failed attempt={attempt} reason={str(e)}")
 
+            # if is_retryable and attempt < MAX_RETRIES:
+            #     wait_time = RETRY_DELAY_SECONDS * attempt  # 점진적 대기 (2s, 4s, ...)
+            #     logger.info(f"ai_call_retry attempt={attempt} wait={wait_time}s")
+            #     await asyncio.sleep(wait_time)
+            #     continue
+
             if is_retryable and attempt < MAX_RETRIES:
-                wait_time = RETRY_DELAY_SECONDS * attempt  # 점진적 대기 (2s, 4s, ...)
+                # 429/503 오류는 Exponential Backoff를 적용해 재시도
+                wait_time = RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
                 logger.info(f"ai_call_retry attempt={attempt} wait={wait_time}s")
                 await asyncio.sleep(wait_time)
                 continue

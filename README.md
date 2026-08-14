@@ -1056,6 +1056,7 @@ HTML 제목으로 실행되지 않고 일반 문자열로 표시됩니다.
 SECRET_KEY=your_secret_key_here
 ALGORITHM=HS256
 GEMINI_API_KEY=your_gemini_api_key_here
+DATABASE_URL=sqlite:////data/chatbot.db
 ```
 
 로컬에서는 `.env`를 사용하고, 배포 환경에서는 Railway의 환경 변수 설정을 사용합니다.
@@ -1143,6 +1144,7 @@ cp .env.example .env
 SECRET_KEY=<your-secret-key>
 ALGORITHM=HS256
 GEMINI_API_KEY=<your-gemini-api-key>
+DATABASE_URL=sqlite:////data/chatbot.db
 ```
 
 실제 값을 입력합니다.
@@ -1206,6 +1208,7 @@ Railway에서 다음 환경 변수를 설정해야 합니다.
 SECRET_KEY
 ALGORITHM
 GEMINI_API_KEY
+DATABASE_URL
 ```
 
 실제 Secret 값은 GitHub에 저장하지 않습니다.

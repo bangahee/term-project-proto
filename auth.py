@@ -15,7 +15,11 @@ from database import get_db
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret-key-for-dev")
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY 환경 변수가 설정되지 않았습니다.")
+
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # Token valid for 24 hours
 

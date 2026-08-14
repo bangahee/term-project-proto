@@ -6,113 +6,284 @@
 import os
 import asyncio
 import logging
+
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from google.genai import errors
 
+
+# -------------------------------------------------------------------
+# 로깅 설정
+# -------------------------------------------------------------------
 logger = logging.getLogger("uvicorn.error")
 
-MAX_RETRIES = 3
-RETRY_DELAY_SECONDS = 2
-TIMEOUT_SECONDS = 5.0  # 명시적 하드 타임아웃 설정 (초)
 
-async def get_ai_response(prompt: str, history_logs: list) -> str:
+# -------------------------------------------------------------------
+# AI 호출 설정
+# -------------------------------------------------------------------
+
+# 최대 API 호출 시도 횟수
+MAX_RETRIES = 3
+
+# 재시도 기본 대기 시간
+RETRY_DELAY_SECONDS = 2
+
+# AI API 1회 호출 최대 대기 시간
+TIMEOUT_SECONDS = 5.0
+
+
+# -------------------------------------------------------------------
+# Google Gemini AI 호출 함수
+# -------------------------------------------------------------------
+async def get_ai_response(
+    prompt: str,
+    history_logs: list,
+    request_id: str
+) -> str:
     """
-    최근 N개의 대화 기록을 포함하여 Google Gemini API를 호출합니다.
-    5초 하드 타임아웃 및 재시도(Retry) 로직이 적용되어 있습니다.
+    최근 N개의 대화 기록을 Context로 구성하여
+    Google Gemini API를 호출합니다.
+
+    주요 기능:
+    - 최근 대화 Context 유지
+    - 5초 하드 타임아웃
+    - 최대 3회 API 호출 시도
+    - Exponential Backoff 적용
+    - Gemini API 오류 처리
+    - request_id 기반 요청 흐름 추적
     """
+
+    # ---------------------------------------------------------------
+    # 환경 변수 로드
+    # ---------------------------------------------------------------
     load_dotenv(override=True)
+
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
 
+    # Gemini API Key가 없거나 예시 값 그대로인 경우
     if not api_key or api_key == "your_gemini_api_key_here":
-        logger.error("ai_call_failed reason=missing_or_invalid_gemini_api_key")
-        return "AI 서비스 설정에 문제가 발생했습니다. (.env GEMINI_API_KEY 확인 필요)"
+        logger.error(
+            f"ai_call_failed "
+            f"request_id={request_id} "
+            f"reason=missing_or_invalid_gemini_api_key"
+        )
 
+        return (
+            "AI 서비스 설정에 문제가 발생했습니다. "
+            "(.env GEMINI_API_KEY 확인 필요)"
+        )
+
+    # Gemini Client 생성
     client = genai.Client(api_key=api_key)
 
-    # 이전 대화 기록으로 Context 구성
+
+    # ---------------------------------------------------------------
+    # 최근 대화 기록을 기반으로 Context 구성
+    # ---------------------------------------------------------------
     contents = []
-    for log in reversed(history_logs):  # 과거 -> 최신 순서
+
+    # main.py에서는 최신 대화부터 조회하기 때문에
+    # reversed()를 사용하여 과거 → 최신 순서로 AI에게 전달
+    for log in reversed(history_logs):
+
+        # 이전 사용자 질문
         contents.append(
             types.Content(
                 role="user",
-                parts=[types.Part.from_text(text=log.question)]
+                parts=[
+                    types.Part.from_text(
+                        text=log.question
+                    )
+                ]
             )
         )
+
+        # 이전 AI 응답
         contents.append(
             types.Content(
                 role="model",
-                parts=[types.Part.from_text(text=log.response)]
+                parts=[
+                    types.Part.from_text(
+                        text=log.response
+                    )
+                ]
             )
         )
 
+    # 현재 사용자의 새로운 질문 추가
     contents.append(
         types.Content(
             role="user",
-            parts=[types.Part.from_text(text=prompt)]
+            parts=[
+                types.Part.from_text(
+                    text=prompt
+                )
+            ]
         )
     )
 
-    logger.info(f"ai_call_start prompt_length={len(prompt)}")
 
+    # ---------------------------------------------------------------
+    # AI 호출 시작 로그
+    # ---------------------------------------------------------------
+    logger.info(
+        f"ai_call_start "
+        f"request_id={request_id} "
+        f"prompt_length={len(prompt)} "
+        f"context_count={len(history_logs)}"
+    )
+
+
+    # ---------------------------------------------------------------
+    # Gemini API 호출 + Retry
+    # ---------------------------------------------------------------
     for attempt in range(1, MAX_RETRIES + 1):
+
         try:
+            # -------------------------------------------------------
+            # asyncio.wait_for를 사용하여
+            # AI API 호출에 명시적인 하드 타임아웃 적용
+            # -------------------------------------------------------
             response = await asyncio.wait_for(
                 client.aio.models.generate_content(
                     model="gemini-3.6-flash",
                     contents=contents,
                     config=types.GenerateContentConfig(
-                        system_instruction="너는 친절하고 유용한 AI 보조원이야.",
+                        system_instruction=(
+                            "너는 친절하고 유용한 AI 보조원이야."
+                        )
                     )
                 ),
                 timeout=TIMEOUT_SECONDS
             )
 
+            # Gemini 응답 텍스트 추출
             ai_text = response.text
-            logger.info("ai_call_success")
+
+            # 정상 응답 로그
+            logger.info(
+                f"ai_call_success "
+                f"request_id={request_id} "
+                f"attempt={attempt}"
+            )
+
             return ai_text
 
+
+        # -----------------------------------------------------------
+        # Timeout 처리
+        # -----------------------------------------------------------
         except asyncio.TimeoutError:
-            logger.error(f"ai_call_failed attempt={attempt} reason=timeout")
 
-            # if attempt < MAX_RETRIES:
-            #     wait_time = RETRY_DELAY_SECONDS * attempt
-            #     logger.info(f"ai_call_retry attempt={attempt} wait={wait_time}s")
-            #     await asyncio.sleep(wait_time)
-            #     continue
+            logger.error(
+                f"ai_call_failed "
+                f"request_id={request_id} "
+                f"attempt={attempt} "
+                f"reason=timeout"
+            )
 
+            # 아직 재시도 횟수가 남아 있다면 재시도
             if attempt < MAX_RETRIES:
-                # Exponential backoff: 2초 → 4초 → 8초 ...
-                wait_time = RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
-                logger.info(f"ai_call_retry attempt={attempt} wait={wait_time}s")
+
+                # Exponential Backoff
+                #
+                # attempt 1 실패 → 2초 대기
+                # attempt 2 실패 → 4초 대기
+                #
+                # MAX_RETRIES가 증가하면 이후에는
+                # 8초 → 16초 ... 형태로 증가
+                wait_time = (
+                    RETRY_DELAY_SECONDS
+                    * (2 ** (attempt - 1))
+                )
+
+                logger.info(
+                    f"ai_call_retry "
+                    f"request_id={request_id} "
+                    f"attempt={attempt} "
+                    f"wait={wait_time}s"
+                )
+
                 await asyncio.sleep(wait_time)
+
                 continue
 
-            return "현재 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요. (error: AI_TIMEOUT)"
+            # 마지막 시도까지 Timeout이면 사용자에게 안내
+            return (
+                "현재 응답이 지연되고 있어요. "
+                "잠시 후 다시 시도해 주세요. "
+                "(error: AI_TIMEOUT)"
+            )
 
+
+        # -----------------------------------------------------------
+        # Google Gemini API 자체 오류 처리
+        # -----------------------------------------------------------
         except errors.APIError as e:
-            # 503(UNAVAILABLE), 429(RESOURCE_EXHAUSTED) 등 재시도 가능한 오류 처리
-            status = getattr(e, "status", None) or getattr(e, "code", None)
-            is_retryable = status in (503, 429, "UNAVAILABLE", "RESOURCE_EXHAUSTED")
 
-            logger.error(f"ai_call_failed attempt={attempt} reason={str(e)}")
+            # Gemini SDK에서 제공하는 상태 코드 확인
+            status_code = (
+                getattr(e, "status", None)
+                or getattr(e, "code", None)
+            )
 
-            # if is_retryable and attempt < MAX_RETRIES:
-            #     wait_time = RETRY_DELAY_SECONDS * attempt  # 점진적 대기 (2s, 4s, ...)
-            #     logger.info(f"ai_call_retry attempt={attempt} wait={wait_time}s")
-            #     await asyncio.sleep(wait_time)
-            #     continue
+            # 일시적 오류라 재시도할 가치가 있는 상태
+            is_retryable = status_code in (
+                503,
+                429,
+                "UNAVAILABLE",
+                "RESOURCE_EXHAUSTED"
+            )
 
+            logger.error(
+                f"ai_call_failed "
+                f"request_id={request_id} "
+                f"attempt={attempt} "
+                f"status={status_code} "
+                f"reason={str(e)}"
+            )
+
+            # 429 / 503 오류이며 재시도 횟수가 남아 있는 경우
             if is_retryable and attempt < MAX_RETRIES:
-                # 429/503 오류는 Exponential Backoff를 적용해 재시도
-                wait_time = RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
-                logger.info(f"ai_call_retry attempt={attempt} wait={wait_time}s")
+
+                # Exponential Backoff
+                wait_time = (
+                    RETRY_DELAY_SECONDS
+                    * (2 ** (attempt - 1))
+                )
+
+                logger.info(
+                    f"ai_call_retry "
+                    f"request_id={request_id} "
+                    f"attempt={attempt} "
+                    f"wait={wait_time}s"
+                )
+
                 await asyncio.sleep(wait_time)
+
                 continue
 
-            return "AI 서비스가 현재 혼잡합니다. 잠시 후 다시 시도해 주세요."
+            # 재시도 불가능하거나 모든 재시도가 실패한 경우
+            return (
+                "AI 서비스가 현재 혼잡합니다. "
+                "잠시 후 다시 시도해 주세요."
+            )
 
+
+        # -----------------------------------------------------------
+        # 예상하지 못한 기타 오류 처리
+        # -----------------------------------------------------------
         except Exception as e:
-            logger.error(f"ai_call_failed reason={str(e)}")
-            return f"AI 서비스 응답 오류가 발생했습니다. (error: {type(e).__name__})"
+
+            logger.exception(
+                f"ai_call_failed "
+                f"request_id={request_id} "
+                f"attempt={attempt} "
+                f"reason={type(e).__name__}"
+            )
+
+            return (
+                "AI 서비스 응답 오류가 발생했습니다. "
+                f"(error: {type(e).__name__})"
+            )

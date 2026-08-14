@@ -2,7 +2,7 @@
 
 FastAPI와 Google Gemini API를 기반으로 구현한 **사용자 인증, 대화 문맥 유지, 대화 이력 DB 저장, AI API 예외 처리 및 외부 배포를 지원하는 웹 기반 AI 챗봇 서비스 프로토타입(PoC)**입니다.
 
-팀 프로젝트 본격 착수 전, 다음 전체 서비스 파이프라인이 실제 환경에서 정상적으로 연결되고 동작하는지 검증하기 위해 선제적으로 제작했습니다.
+팀 프로젝트의 기술적 베이스라인을 구축하기 위해 다음 전체 서비스 파이프라인이 실제 환경에서 정상적으로 연결되고 동작하는지 검증했습니다.
 
 ```text
 Web UI
@@ -21,9 +21,9 @@ Web UI
 
 > ⚠️ **현재 단계 안내**
 >
-> 본 저장소는 단일 작성자가 구현한 기술 검증용 PoC입니다.
+> 본 저장소의 현재 구현은 단일 작성자가 구축한 기술 검증용 PoC입니다.
 >
-> 서비스 배포와 핵심 기능 검증은 완료했지만, `main` / `develop` 브랜치 운영, 기능 브랜치, PR 기반 Merge, 팀원별 유의미한 커밋 10회 이상 등의 **팀 협업 요구사항은 아직 완료된 것으로 간주하지 않습니다.**
+> 서비스 배포와 핵심 기능 검증은 완료했지만, `main` / `develop` 브랜치 실제 운영, 기능 브랜치, PR 기반 Merge, 팀원별 유의미한 커밋 10회 이상 등의 **팀 협업 요구사항은 아직 완료된 것으로 간주하지 않습니다.**
 >
 > 해당 항목은 팀 본 프로젝트에서 실제 Git 이력과 함께 적용할 예정입니다.
 
@@ -31,7 +31,15 @@ Web UI
 
 # 1. 프로젝트 개요
 
-## 1.1 개발 목적
+## 1.1 문제 정의
+
+AI 챗봇 서비스를 실제 웹 서비스로 운영하기 위해서는 웹 UI, 사용자 인증, AI API 호출, DB 저장, 예외 처리, 로그 추적 및 배포가 하나의 흐름으로 연결되어야 합니다.
+
+본 프로젝트는 이러한 개별 기술을 통합하여 로그인 사용자가 질문을 입력하고, AI 응답을 받고, 대화 기록을 사용자별로 저장·조회할 수 있는 서비스를 구현하는 것을 목표로 합니다.
+
+---
+
+## 1.2 개발 목적
 
 본 프로젝트의 목적은 개별 기술을 단순히 구현하는 것이 아니라 다음 기술 요소를 하나의 실제 웹 서비스로 연결하는 것입니다.
 
@@ -78,13 +86,30 @@ SQLite DB 저장
 
 ---
 
-## 1.2 타겟 사용자
+## 1.3 타겟 사용자
 
 로그인 후 개인별 대화 기록을 보관하면서 이전 대화를 바탕으로 연속성 있는 AI 대화를 진행하고자 하는 웹 사용자입니다.
 
 ---
 
-## 1.3 핵심 기능
+## 1.4 핵심 시나리오
+
+```text
+1. 사용자가 웹 서비스에 접속한다.
+2. 회원가입 후 로그인한다.
+3. 서버가 로그인 성공 시 JWT Access Token을 발급한다.
+4. 사용자가 챗봇 화면에서 질문을 입력한다.
+5. FastAPI 서버가 JWT를 검증하여 로그인 사용자를 확인한다.
+6. 입력값을 검증하고 해당 사용자의 최근 대화 기록을 조회한다.
+7. 최근 대화를 Context로 구성하여 Gemini API를 호출한다.
+8. Gemini의 응답을 사용자에게 반환한다.
+9. 질문과 AI 응답을 SQLite DB에 저장한다.
+10. 사용자는 자신의 기존 대화 기록을 다시 조회할 수 있다.
+```
+
+---
+
+## 1.5 핵심 기능
 
 1. 회원가입 및 로그인
 2. PBKDF2 기반 비밀번호 해싱
@@ -155,7 +180,7 @@ https://term-project-proto-production.up.railway.app
                    └──────────────────┘
 ```
 
-Railway 서비스의 컨테이너가 재배포되더라도 SQLite 데이터가 사라지지 않도록 영속 Volume을 사용합니다.
+Railway 서비스의 컨테이너가 재배포되더라도 SQLite 데이터가 사라지지 않도록 Persistent Volume을 사용합니다.
 
 ---
 
@@ -209,7 +234,7 @@ templates/
 └── chat.html
 ```
 
-HTML 페이지 라우트:
+HTML 페이지 Route:
 
 ```text
 GET /
@@ -237,7 +262,7 @@ GET  /api/me/chats
 client.aio.models.generate_content(...)
 ```
 
-현재 설정된 Gemini 모델을 서버에서 호출하며 API Key는 브라우저에 전달하지 않습니다.
+Gemini 모델은 FastAPI 서버에서 호출하며 API Key는 브라우저에 전달하지 않습니다.
 
 ```text
 Browser
@@ -271,7 +296,7 @@ created_at DESC
 LIMIT 3
 ```
 
-이후 AI에 전달할 때는 다시 과거 → 최신 순서로 구성합니다.
+AI에 전달할 때는 다시 과거 → 최신 순서로 구성합니다.
 
 ```text
 이전 User 질문
@@ -414,7 +439,7 @@ question_length
 
 ## Step 10. 안전한 DOM 렌더링
 
-`chat.html`에서는 사용자 질문과 AI 응답을 출력할 때 외부 문자열을 `innerHTML`로 삽입하지 않습니다.
+`chat.html`에서는 사용자 질문과 AI 응답을 출력할 때 외부 문자열을 `innerHTML`로 직접 삽입하지 않습니다.
 
 DOM Element를 생성하고 `textContent`를 사용합니다.
 
@@ -507,7 +532,7 @@ messageText.textContent = String(message ?? '');
 
 | 파일 / 디렉터리 | 역할 |
 | --- | --- |
-| `main.py` | FastAPI 앱, 페이지/API 라우팅, 입력 검증, JWT 인증 연결, request_id 생성, DB 저장, 서버 로깅 |
+| `main.py` | FastAPI 앱, 페이지/API 라우팅, 입력 검증, JWT 인증 연결, `request_id` 생성, DB 저장, 서버 로깅 |
 | `auth.py` | PBKDF2 비밀번호 해싱, JWT 생성 및 인증 사용자 조회 |
 | `ai_service.py` | Gemini API, Context 구성, Timeout, Retry, Exponential Backoff, AI 예외 처리 |
 | `database.py` | SQLite / SQLAlchemy 엔진 및 DB 세션 관리 |
@@ -752,7 +777,7 @@ SQLite + SQLAlchemy ORM을 사용합니다.
                                            +----------------------+
 ```
 
-각 ChatLog에는 최소 다음 정보가 저장됩니다.
+각 `ChatLog`에는 최소 다음 정보가 저장됩니다.
 
 - 사용자 식별자 `user_id`
 - 질문 `question`
@@ -772,11 +797,11 @@ Railway 배포 환경에서 SQLite DB를 영속적으로 유지하기 위해 Per
 실제 검증 과정:
 
 ```text
-1. railwaytest 계정 생성
+1. 테스트 계정 생성
 2. 챗봇 대화 생성
 3. ChatLog 저장 확인
 4. Railway Redeploy
-5. 기존 railwaytest 계정으로 다시 로그인
+5. 기존 테스트 계정으로 다시 로그인
 6. 기존 대화 기록 조회
 ```
 
@@ -815,7 +840,7 @@ ChatLog 유지
 배포 환경 테스트 결과:
 
 ```text
-HTTP/2 422
+HTTP 422 Unprocessable Content
 ```
 
 ```text
@@ -831,7 +856,7 @@ Value error, 질문은 공백일 수 없습니다.
 501자를 전달한 경우 배포 환경에서:
 
 ```text
-HTTP/2 422
+HTTP 422 Unprocessable Content
 ```
 
 ```text
@@ -867,17 +892,21 @@ Retry
 ## 11.2 Exponential Backoff
 
 ```text
-1차 실패
+1차 호출 실패
  ↓
-2초
+2초 대기
  ↓
 2차 시도
  ↓
 실패
  ↓
-4초
+4초 대기
  ↓
 3차 시도
+ ↓
+최종 실패
+ ↓
+사용자 오류 안내
 ```
 
 최종 실패 시 서버 프로세스를 종료하지 않고 사용자에게 오류 안내를 반환합니다.
@@ -893,7 +922,7 @@ AI 서비스가 현재 혼잡합니다.
 
 ---
 
-## 11.3 DB 실패
+## 11.3 DB 실패 처리
 
 ```text
 db.add()
@@ -905,7 +934,7 @@ db.commit()
 db.rollback()
 ```
 
-DB 저장 실패가 이후 SQLAlchemy Session 사용에 미치는 영향을 최소화합니다.
+DB 저장 실패 시 `rollback()`을 실행하여 실패한 트랜잭션 상태를 정리합니다.
 
 ---
 
@@ -1008,7 +1037,7 @@ const messageText = document.createElement('span');
 messageText.textContent = String(message ?? '');
 ```
 
-## 테스트 1
+## 14.1 HTML 문자열 테스트
 
 입력:
 
@@ -1026,7 +1055,7 @@ HTML 제목으로 실행되지 않고 일반 문자열로 표시됩니다.
 
 ---
 
-## 테스트 2
+## 14.2 XSS 형태 입력 테스트
 
 입력:
 
@@ -1052,20 +1081,81 @@ HTML 제목으로 실행되지 않고 일반 문자열로 표시됩니다.
 
 필요한 환경 변수:
 
-```env
-SECRET_KEY=your_secret_key_here
-ALGORITHM=HS256
-GEMINI_API_KEY=your_gemini_api_key_here
-DATABASE_URL=sqlite:////data/chatbot.db
+```text
+SECRET_KEY
+ALGORITHM
+GEMINI_API_KEY
+DATABASE_URL
 ```
-
-로컬에서는 `.env`를 사용하고, 배포 환경에서는 Railway의 환경 변수 설정을 사용합니다.
 
 실제 Secret 값은 README 또는 Git 저장소에 작성하지 않습니다.
 
 ---
 
-## 15.1 `.gitignore`
+## 15.1 로컬 환경 변수
+
+로컬 개발 환경에서는 `.env` 파일을 사용합니다.
+
+예:
+
+```env
+SECRET_KEY=your_secret_key_here
+ALGORITHM=HS256
+GEMINI_API_KEY=your_gemini_api_key_here
+DATABASE_URL=sqlite:///./chatbot.db
+```
+
+로컬 환경에서는 프로젝트 디렉터리의 `chatbot.db`를 사용합니다.
+
+---
+
+## 15.2 Railway 환경 변수
+
+Railway에서는 Railway Variables에 다음 환경 변수를 등록합니다.
+
+```text
+SECRET_KEY
+ALGORITHM
+GEMINI_API_KEY
+DATABASE_URL
+```
+
+Railway Persistent Volume을 `/data`에 연결한 경우 DB 경로는 다음과 같이 설정합니다.
+
+```env
+DATABASE_URL=sqlite:////data/chatbot.db
+```
+
+즉:
+
+```text
+Local
+DATABASE_URL=sqlite:///./chatbot.db
+
+Railway
+DATABASE_URL=sqlite:////data/chatbot.db
+```
+
+와 같이 환경에 따라 DB 위치를 구분합니다.
+
+---
+
+## 15.3 `.env.example`
+
+저장소의 `.env.example`에는 실제 Secret 대신 예시 값을 사용합니다.
+
+```env
+SECRET_KEY=your_secret_key_here
+ALGORITHM=HS256
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Local SQLite database
+DATABASE_URL=sqlite:///./chatbot.db
+```
+
+---
+
+## 15.4 `.gitignore`
 
 ```gitignore
 .env
@@ -1138,16 +1228,16 @@ macOS / Linux:
 cp .env.example .env
 ```
 
-`.env`:
+`.env` 파일을 열어 실제 값을 입력합니다.
 
 ```env
 SECRET_KEY=<your-secret-key>
 ALGORITHM=HS256
 GEMINI_API_KEY=<your-gemini-api-key>
-DATABASE_URL=sqlite:////data/chatbot.db
+DATABASE_URL=sqlite:///./chatbot.db
 ```
 
-실제 값을 입력합니다.
+> 로컬 실행에서는 `sqlite:///./chatbot.db`를 사용합니다. Railway의 `/data` 경로는 로컬 실행용 경로가 아닙니다.
 
 ---
 
@@ -1157,7 +1247,7 @@ DATABASE_URL=sqlite:////data/chatbot.db
 pytest -v
 ```
 
-현재 입력 검증 테스트 결과:
+현재 입력 검증 테스트:
 
 ```text
 tests/test_validation.py::test_valid_question PASSED
@@ -1200,9 +1290,9 @@ http://127.0.0.1:8000
 https://term-project-proto-production.up.railway.app
 ```
 
-## 배포 환경 변수
+## 17.1 배포 환경 변수
 
-Railway에서 다음 환경 변수를 설정해야 합니다.
+Railway에서 다음 환경 변수를 설정합니다.
 
 ```text
 SECRET_KEY
@@ -1213,11 +1303,29 @@ DATABASE_URL
 
 실제 Secret 값은 GitHub에 저장하지 않습니다.
 
-## DB
+Railway의 DB 경로:
 
-배포 환경의 SQLite DB는 Persistent Volume을 통해 유지합니다.
+```env
+DATABASE_URL=sqlite:////data/chatbot.db
+```
 
-따라서 단순 컨테이너 파일 시스템에만 DB를 저장하는 방식과 달리 재배포 이후에도 사용자 및 ChatLog 데이터를 유지할 수 있습니다.
+---
+
+## 17.2 Persistent Volume
+
+배포 환경의 SQLite DB는 Railway Persistent Volume을 통해 유지합니다.
+
+```text
+FastAPI
+   ↓
+DATABASE_URL
+   ↓
+/data/chatbot.db
+   ↓
+Railway Persistent Volume
+```
+
+따라서 단순 컨테이너 파일 시스템에만 DB를 저장하는 방식과 달리 재배포 이후에도 사용자 및 `ChatLog` 데이터를 유지할 수 있습니다.
 
 ---
 
@@ -1307,6 +1415,8 @@ curl -i -X POST \
 
 ## 19.4 JWT 저장
 
+로그인 응답에서 받은 Access Token을 사용합니다.
+
 ```bash
 TOKEN='<access_token>'
 ```
@@ -1329,7 +1439,25 @@ curl -i \
 
 ---
 
-## 19.6 공백 입력 검증
+## 19.6 인증된 챗봇 요청
+
+```bash
+curl -i -X POST \
+  https://term-project-proto-production.up.railway.app/api/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"question":"안녕"}'
+```
+
+예상:
+
+```text
+200 OK
+```
+
+---
+
+## 19.7 공백 입력 검증
 
 ```bash
 curl -i -X POST \
@@ -1347,7 +1475,7 @@ curl -i -X POST \
 
 ---
 
-## 19.7 501자 입력 검증
+## 19.8 501자 입력 검증
 
 ```bash
 curl -i -X POST \
@@ -1399,7 +1527,7 @@ main
       └── fix/<bug-name>
 ```
 
-## 브랜치 역할
+## 21.1 브랜치 역할
 
 | Branch | 역할 |
 | --- | --- |
@@ -1408,7 +1536,9 @@ main
 | `feat/<기능명>` | 기능 단위 개발 |
 | `fix/<버그명>` | 버그 수정 |
 
-## 팀 프로젝트 Git 규칙
+---
+
+## 21.2 팀 프로젝트 Git 규칙
 
 1. `main`과 `develop`에서 직접 기능 개발하지 않습니다.
 2. `develop`에서 기능 브랜치를 생성합니다.
@@ -1426,7 +1556,7 @@ git pull origin develop
 git checkout -b feat/chat-ui
 ```
 
-작업:
+작업 후:
 
 ```bash
 git add .
@@ -1450,7 +1580,7 @@ develop
 
 # 22. 현재 구현 상태
 
-## PoC 완료
+## 22.1 PoC 완료
 
 - [x] FastAPI 웹 서버
 - [x] 회원가입
@@ -1482,6 +1612,7 @@ develop
 - [x] HTML 형태 입력 안전 출력 검증
 - [x] XSS 형태 입력 실행 방지 검증
 - [x] `.env` 기반 민감정보 관리
+- [x] `.env.example`
 - [x] `.gitignore`
 - [x] 로컬 실행 검증
 - [x] Railway 외부 배포
@@ -1495,7 +1626,9 @@ develop
 - [x] Railway Persistent Volume
 - [x] Railway 재배포 후 DB 데이터 유지 검증
 
-## 팀 본 프로젝트에서 추가 필요
+---
+
+## 22.2 팀 본 프로젝트에서 추가 필요
 
 - [ ] `main` / `develop` 브랜치 실제 운영
 - [ ] 기능 단위 작업 브랜치 사용

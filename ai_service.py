@@ -30,7 +30,7 @@ MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
 
 # AI API 1회 호출 최대 대기 시간
-TIMEOUT_SECONDS = 5.0
+TIMEOUT_SECONDS = 20.0
 
 
 # -------------------------------------------------------------------

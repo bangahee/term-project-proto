@@ -112,7 +112,10 @@ async def chat_endpoint(
         db.add(chat_log)
         db.commit()
         logger.info(f"db_save_success user_id={current_user.id} chat_id={chat_log.id}")
+    # except Exception as e:
+    #     logger.error(f"db_save_failed reason={str(e)}")
     except Exception as e:
+        db.rollback()
         logger.error(f"db_save_failed reason={str(e)}")
 
     return {"question": req.question, "response": ai_response}

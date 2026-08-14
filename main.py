@@ -8,7 +8,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import models
 import auth
@@ -59,6 +59,16 @@ class ChatRequest(BaseModel):
         max_length=500,
         description="빈 입력 차단 및 길이 제한"
     )
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, value: str) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError("질문은 공백일 수 없습니다.")
+
+        return value
 
 
 # -------------------------------------------------------------------

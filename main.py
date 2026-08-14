@@ -88,7 +88,10 @@ async def chat_endpoint(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    logger.info(f"request_received user_id={current_user.id} question={req.question[:20]}")
+    # logger.info(f"request_received user_id={current_user.id} question={req.question[:20]}")
+    logger.info(
+    f"request_received user_id={current_user.id} "
+    f"question_length={len(req.question)}")
 
     # 최근 3개 대화 기록 조회 (Context 구성용)
     recent_chats = (

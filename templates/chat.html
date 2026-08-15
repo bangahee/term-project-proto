@@ -21,6 +21,12 @@
             margin-bottom: 15px;
         }
 
+        .chat-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 10px;
+        }
+
         #chat-box {
             border: 1px solid #ddd;
             background: #fafafa;
@@ -85,6 +91,12 @@
             padding: 6px 12px;
             font-size: 13px;
         }
+
+        .clear-btn {
+            background: #6c757d;
+            padding: 7px 12px;
+            font-size: 13px;
+        }
     </style>
 </head>
 
@@ -103,6 +115,18 @@
                 로그아웃
             </button>
         </div>
+    </div>
+
+
+    <!-- 대화 기록 삭제 -->
+    <div class="chat-actions">
+        <button
+            class="clear-btn"
+            id="clear-btn"
+            onclick="clearChatHistory()"
+        >
+            대화 기록 삭제
+        </button>
     </div>
 
 
@@ -259,6 +283,84 @@
                     '이력 로드 실패:',
                     err
                 );
+            }
+        }
+
+
+        // -----------------------------------------------------------
+        // 대화 기록 전체 삭제
+        //
+        // 삭제 전 사용자에게 복구할 수 없음을 경고하고,
+        // 확인한 경우에만 DELETE API를 호출합니다.
+        // -----------------------------------------------------------
+        async function clearChatHistory() {
+            const confirmed = confirm(
+                '저장된 대화 기록을 모두 삭제하시겠습니까?\n\n삭제된 기록은 복구할 수 없습니다.'
+            );
+
+            // 사용자가 취소한 경우 아무 작업도 하지 않음
+            if (!confirmed) {
+                return;
+            }
+
+            const clearBtn =
+                document.getElementById('clear-btn');
+
+            clearBtn.disabled = true;
+            clearBtn.innerText = '삭제 중...';
+
+            try {
+                const res = await fetch('/api/me/chats', {
+                    method: 'DELETE',
+
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+
+                // JWT 만료 또는 인증 실패
+                if (res.status === 401) {
+                    alert('로그인이 만료되었습니다.');
+                    logout();
+                    return;
+                }
+
+
+                const data = await res.json();
+
+
+                if (!res.ok) {
+                    throw new Error(
+                        data.detail || '대화 기록 삭제에 실패했습니다.'
+                    );
+                }
+
+
+                // DB 삭제 성공 후 현재 화면의 메시지도 제거
+                document
+                    .getElementById('chat-box')
+                    .replaceChildren();
+
+
+                alert('대화 기록이 삭제되었습니다.');
+
+
+            } catch (err) {
+                console.error(
+                    '대화 기록 삭제 실패:',
+                    err
+                );
+
+                alert(
+                    err.message ||
+                    '대화 기록 삭제 중 오류가 발생했습니다.'
+                );
+
+
+            } finally {
+                clearBtn.disabled = false;
+                clearBtn.innerText = '대화 기록 삭제';
             }
         }
 

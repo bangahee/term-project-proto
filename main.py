@@ -297,3 +297,52 @@ async def get_my_chats(
         }
         for log in logs
     ]
+
+
+# -------------------------------------------------------------------
+# 5. 내 대화 기록 전체 삭제 API
+# -------------------------------------------------------------------
+@app.delete("/api/me/chats")
+async def delete_my_chats(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    try:
+        # -----------------------------------------------------------
+        # 현재 로그인한 사용자의 대화 기록만 삭제
+        #
+        # current_user.id를 조건으로 사용하므로
+        # 다른 사용자의 ChatLog는 삭제되지 않음
+        # -----------------------------------------------------------
+        deleted_count = (
+            db.query(models.ChatLog)
+            .filter(models.ChatLog.user_id == current_user.id)
+            .delete(synchronize_session=False)
+        )
+
+        db.commit()
+
+        logger.info(
+            f"chat_history_delete_success "
+            f"user_id={current_user.id} "
+            f"deleted_count={deleted_count}"
+        )
+
+        return {
+            "message": "대화 기록이 삭제되었습니다.",
+            "deleted_count": deleted_count
+        }
+
+    except Exception as e:
+        db.rollback()
+
+        logger.error(
+            f"chat_history_delete_failed "
+            f"user_id={current_user.id} "
+            f"reason={str(e)}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="대화 기록 삭제 중 오류가 발생했습니다."
+        )

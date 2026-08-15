@@ -202,6 +202,9 @@
 
         const MAX_QUESTION_LENGTH = 500;
 
+        // 모든 화면 표시 시간은 한국 표준시(KST) 기준
+        const DISPLAY_TIME_ZONE = 'Asia/Seoul';
+
         // 현재 화면에 마지막으로 표시된 날짜
         let lastDisplayedDate = null;
 
@@ -269,28 +272,88 @@
 
 
         // -----------------------------------------------------------
+        // Timestamp 파싱
+        //
+        // models.py에서 datetime.utcnow()을 사용하기 때문에
+        // DB의 created_at은 UTC 기준입니다.
+        //
+        // Python의 isoformat() 결과는 보통:
+        // 2026-08-15T06:01:30.123456
+        //
+        // 처럼 timezone 정보가 없는 문자열이므로,
+        // 끝에 Z를 붙여 JavaScript가 UTC로 인식하도록 합니다.
+        //
+        // 이후 화면에서는 Asia/Seoul(KST)로 변환합니다.
+        // -----------------------------------------------------------
+        function parseTimestamp(timestamp) {
+
+            if (!timestamp) {
+                return null;
+            }
+
+            // 브라우저에서 직접 생성한 Date 객체
+            if (timestamp instanceof Date) {
+                return timestamp;
+            }
+
+
+            let normalizedTimestamp =
+                String(timestamp);
+
+
+            // 이미 timezone 정보가 있는 경우는 그대로 사용
+            //
+            // 예:
+            // 2026-08-15T06:01:00Z
+            // 2026-08-15T15:01:00+09:00
+            //
+            // timezone 정보가 없으면 UTC라는 의미로 Z 추가
+            if (
+                !normalizedTimestamp.endsWith('Z')
+                && !/[+-]\d{2}:\d{2}$/.test(normalizedTimestamp)
+            ) {
+                normalizedTimestamp =
+                    `${normalizedTimestamp}Z`;
+            }
+
+
+            const date =
+                new Date(normalizedTimestamp);
+
+
+            if (Number.isNaN(date.getTime())) {
+                return null;
+            }
+
+
+            return date;
+        }
+
+
+        // -----------------------------------------------------------
         // Timestamp 표시 형식 변환
         //
-        // HH:MM 형식으로 변환
+        // 모든 메시지를 KST 기준 HH:MM으로 표시
+        //
+        // 예:
+        // UTC 06:01
+        // → KST 15:01
         // -----------------------------------------------------------
         function formatTimestamp(timestamp) {
 
-            if (!timestamp) {
-                return '';
-            }
-
             const date =
-                timestamp instanceof Date
-                    ? timestamp
-                    : new Date(timestamp);
+                parseTimestamp(timestamp);
 
-            if (Number.isNaN(date.getTime())) {
+
+            if (!date) {
                 return '';
             }
+
 
             return date.toLocaleTimeString(
                 'ko-KR',
                 {
+                    timeZone: DISPLAY_TIME_ZONE,
                     hour: '2-digit',
                     minute: '2-digit',
                     hour12: false
@@ -300,38 +363,56 @@
 
 
         // -----------------------------------------------------------
-        // 날짜를 비교하기 위한 Key 생성
+        // 날짜 비교용 Key 생성
+        //
+        // 반드시 KST 기준 날짜로 계산
         //
         // 예:
         // 2026-08-15
         // -----------------------------------------------------------
         function getDateKey(timestamp) {
 
-            if (!timestamp) {
-                return '';
-            }
-
             const date =
-                timestamp instanceof Date
-                    ? timestamp
-                    : new Date(timestamp);
+                parseTimestamp(timestamp);
 
-            if (Number.isNaN(date.getTime())) {
+
+            if (!date) {
                 return '';
             }
+
+
+            const parts =
+                new Intl.DateTimeFormat(
+                    'en-CA',
+                    {
+                        timeZone: DISPLAY_TIME_ZONE,
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    }
+                ).formatToParts(date);
+
 
             const year =
-                date.getFullYear();
+                parts.find(
+                    part => part.type === 'year'
+                )?.value;
 
             const month =
-                String(
-                    date.getMonth() + 1
-                ).padStart(2, '0');
+                parts.find(
+                    part => part.type === 'month'
+                )?.value;
 
             const day =
-                String(
-                    date.getDate()
-                ).padStart(2, '0');
+                parts.find(
+                    part => part.type === 'day'
+                )?.value;
+
+
+            if (!year || !month || !day) {
+                return '';
+            }
+
 
             return `${year}-${month}-${day}`;
         }
@@ -340,27 +421,24 @@
         // -----------------------------------------------------------
         // 날짜 표시용 문자열 생성
         //
-        // 예:
+        // KST 기준으로:
         // 2026년 8월 15일
         // -----------------------------------------------------------
         function formatDate(timestamp) {
 
-            if (!timestamp) {
-                return '';
-            }
-
             const date =
-                timestamp instanceof Date
-                    ? timestamp
-                    : new Date(timestamp);
+                parseTimestamp(timestamp);
 
-            if (Number.isNaN(date.getTime())) {
+
+            if (!date) {
                 return '';
             }
+
 
             return date.toLocaleDateString(
                 'ko-KR',
                 {
+                    timeZone: DISPLAY_TIME_ZONE,
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric'
@@ -377,12 +455,14 @@
             const dateKey =
                 getDateKey(timestamp);
 
+
             if (!dateKey) {
                 return;
             }
 
 
-            // 이전에 표시한 날짜와 같으면 구분선 추가하지 않음
+            // 이전에 표시한 날짜와 같으면
+            // 같은 날짜 구분선을 반복해서 만들지 않음
             if (dateKey === lastDisplayedDate) {
                 return;
             }
@@ -395,11 +475,13 @@
             const separator =
                 document.createElement('div');
 
+
             separator.classList.add(
                 'date-separator'
             );
 
 
+            // textContent 사용
             separator.textContent =
                 formatDate(timestamp);
 
@@ -418,8 +500,8 @@
         // innerHTML을 사용하지 않고 textContent를 사용하여
         // 사용자 입력 또는 AI 응답이 HTML로 실행되는 것을 방지
         //
-        // 날짜가 바뀐 경우 날짜 구분선 추가
-        // timestamp를 함께 표시
+        // 날짜 변경 시 날짜 구분선 추가
+        // 각 메시지에는 KST 기준 HH:MM 표시
         // -----------------------------------------------------------
         function appendMessage(
             role,
@@ -427,16 +509,19 @@
             isError = false,
             timestamp = null
         ) {
+
             const box =
                 document.getElementById('chat-box');
 
 
-            // 메시지 추가 전에 날짜 변경 여부 확인
+            // 메시지를 추가하기 전에
+            // 날짜가 변경되었는지 확인
             appendDateSeparator(timestamp);
 
 
             const messageDiv =
                 document.createElement('div');
+
 
             messageDiv.classList.add('msg');
 
@@ -463,6 +548,7 @@
 
                 label.classList.add('bot');
 
+
                 if (isError) {
 
                     label.textContent =
@@ -480,8 +566,11 @@
                 document.createElement('span');
 
 
+            // -------------------------------------------------------
             // 핵심 보안 부분
+            //
             // HTML을 해석하지 않고 일반 문자열로 출력
+            // -------------------------------------------------------
             messageText.textContent =
                 String(message ?? '');
 
@@ -491,7 +580,7 @@
 
 
             // -------------------------------------------------------
-            // Timestamp 추가
+            // KST Timestamp 추가
             // -------------------------------------------------------
             const formattedTime =
                 formatTimestamp(timestamp);
@@ -502,12 +591,15 @@
                 const timeSpan =
                     document.createElement('span');
 
+
                 timeSpan.classList.add(
                     'timestamp'
                 );
 
+
                 timeSpan.textContent =
                     formattedTime;
+
 
                 messageDiv.appendChild(
                     timeSpan
@@ -540,7 +632,9 @@
 
                 // JWT 만료 또는 인증 실패
                 if (res.status === 401) {
+
                     logout();
+
                     return;
                 }
 
@@ -567,7 +661,7 @@
                 box.replaceChildren();
 
 
-                // 날짜 구분 기준도 초기화
+                // 날짜 구분 기준 초기화
                 lastDisplayedDate = null;
 
 
@@ -575,9 +669,13 @@
 
                     // ------------------------------------------------
                     // 하나의 ChatLog는
-                    // question + response + created_at
-                    // 한 세트이므로
-                    // 질문과 응답에 같은 시간을 사용
+                    //
+                    // question
+                    // response
+                    // created_at
+                    //
+                    // 한 세트이므로 질문과 응답에 같은
+                    // DB timestamp를 사용합니다.
                     // ------------------------------------------------
 
                     appendMessage(
@@ -616,7 +714,7 @@
         // 대화 기록 전체 삭제
         //
         // 삭제 전 사용자에게 복구할 수 없음을 경고하고,
-        // 확인한 경우에만 DELETE API를 호출합니다.
+        // 확인한 경우에만 DELETE API 호출
         // -----------------------------------------------------------
         async function clearChatHistory() {
 
@@ -639,6 +737,7 @@
 
 
             clearBtn.disabled = true;
+
             clearBtn.innerText =
                 '삭제 중...';
 
@@ -737,10 +836,12 @@
                     'question'
                 );
 
+
             const btn =
                 document.getElementById(
                     'send-btn'
                 );
+
 
             const box =
                 document.getElementById(
@@ -763,7 +864,9 @@
             }
 
 
+            // -------------------------------------------------------
             // 중복 전송 방지
+            // -------------------------------------------------------
             input.disabled = true;
             btn.disabled = true;
 
@@ -771,8 +874,9 @@
             // -------------------------------------------------------
             // 사용자 질문을 즉시 화면에 표시
             //
-            // 서버 응답을 기다리는 동안에는
-            // 현재 브라우저 시간을 임시로 사용
+            // 브라우저의 Date 객체는 절대 시각을 가지고 있으며
+            // formatTimestamp / formatDate에서
+            // Asia/Seoul 기준으로 표시합니다.
             // -------------------------------------------------------
             const userTimestamp =
                 new Date();
@@ -789,8 +893,8 @@
             input.value = '';
 
 
-            // 입력값 초기화 후 남은 글자 수도
-            // 다시 500자로 초기화
+            // 입력값 초기화 후
+            // 글자 수 counter도 다시 500자로 초기화
             charCounter.textContent =
                 `${MAX_QUESTION_LENGTH}자 남음`;
 
@@ -882,7 +986,8 @@
                 // 정상 AI 응답
                 //
                 // main.py에서 반환한
-                // DB created_at 값을 사용
+                // DB created_at(UTC)을 받아서
+                // 화면에서는 KST로 변환합니다.
                 // ---------------------------------------------------
                 appendMessage(
                     'bot',

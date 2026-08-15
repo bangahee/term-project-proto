@@ -1,6 +1,6 @@
 # 🤖 웹 기반 AI 챗봇 서비스 PoC (Term Project Prototype)
 
-FastAPI와 Google Gemini API를 기반으로 구현한 **사용자 인증, 대화 문맥 유지, 대화 이력 DB 저장, AI API 예외 처리 및 외부 배포를 지원하는 웹 기반 AI 챗봇 서비스 프로토타입(PoC)**입니다.
+FastAPI와 OpenAI API를 기반으로 구현한 **사용자 인증, 대화 문맥 유지, 대화 이력 DB 저장·조회·삭제, AI API 예외 처리 및 외부 배포를 지원하는 웹 기반 AI 챗봇 서비스 프로토타입(PoC)**입니다.
 
 팀 프로젝트의 기술적 베이스라인을 구축하기 위해 다음 전체 서비스 파이프라인이 실제 환경에서 정상적으로 연결되고 동작하는지 검증했습니다.
 
@@ -10,14 +10,14 @@ Web UI
 → JWT Authentication
 → Input Validation
 → Conversation Context
-→ Google Gemini API
+→ OpenAI API (GPT-5 nano)
 → AI Response
 → SQLite DB
 → User-specific Chat History
 → Railway Deployment
 ```
 
-현재 PoC는 로컬 환경뿐 아니라 **Railway를 통한 외부 네트워크 배포까지 완료**했으며, 인증, AI 호출, DB 저장, 사용자별 로그 조회, 입력 검증, 예외 처리, DB 영속성 및 안전한 DOM 렌더링을 배포 환경에서 검증했습니다.
+현재 PoC는 로컬 환경뿐 아니라 **Railway를 통한 외부 네트워크 배포까지 완료**했으며, 인증, AI 호출, DB 저장, 사용자별 로그 조회/삭제, 입력 검증, 예외 처리, DB 영속성 및 안전한 DOM 렌더링을 배포 환경에서 검증했습니다.
 
 > ⚠️ **현재 단계 안내**
 >
@@ -35,7 +35,7 @@ Web UI
 
 AI 챗봇 서비스를 실제 웹 서비스로 운영하기 위해서는 웹 UI, 사용자 인증, AI API 호출, DB 저장, 예외 처리, 로그 추적 및 배포가 하나의 흐름으로 연결되어야 합니다.
 
-본 프로젝트는 이러한 개별 기술을 통합하여 로그인 사용자가 질문을 입력하고, AI 응답을 받고, 대화 기록을 사용자별로 저장·조회할 수 있는 서비스를 구현하는 것을 목표로 합니다.
+본 프로젝트는 이러한 개별 기술을 통합하여 로그인 사용자가 질문을 입력하고 AI 응답을 받은 뒤, 자신의 대화 기록을 사용자별로 저장·조회·삭제할 수 있는 서비스를 구현하는 것을 목표로 합니다.
 
 ---
 
@@ -47,7 +47,8 @@ AI 챗봇 서비스를 실제 웹 서비스로 운영하기 위해서는 웹 UI,
 - **Frontend**: HTML / CSS / JavaScript + Jinja2
 - **Database**: SQLite + SQLAlchemy ORM
 - **Authentication**: JWT + PBKDF2 Password Hashing
-- **AI API**: Google Gemini API (`google-genai`)
+- **AI API**: OpenAI API
+- **AI Model**: GPT-5 nano
 - **Deployment**: Railway
 - **Configuration**: Environment Variables / `.env`
 - **Persistence**: Railway Volume + SQLite
@@ -71,7 +72,7 @@ JWT 사용자 인증
   ↓
 최근 대화 Context 조회
   ↓
-Gemini API 호출
+OpenAI API 호출 (GPT-5 nano)
   ↓
 Timeout / Retry / Exception Handling
   ↓
@@ -79,7 +80,7 @@ AI 응답
   ↓
 SQLite DB 저장
   ↓
-사용자별 대화 이력 조회
+사용자별 대화 이력 조회 / 삭제
   ↓
 웹 화면 출력
 ```
@@ -96,15 +97,17 @@ SQLite DB 저장
 
 ```text
 1. 사용자가 웹 서비스에 접속한다.
-2. 회원가입 후 로그인한다.
-3. 서버가 로그인 성공 시 JWT Access Token을 발급한다.
-4. 사용자가 챗봇 화면에서 질문을 입력한다.
-5. FastAPI 서버가 JWT를 검증하여 로그인 사용자를 확인한다.
-6. 입력값을 검증하고 해당 사용자의 최근 대화 기록을 조회한다.
-7. 최근 대화를 Context로 구성하여 Gemini API를 호출한다.
-8. Gemini의 응답을 사용자에게 반환한다.
-9. 질문과 AI 응답을 SQLite DB에 저장한다.
-10. 사용자는 자신의 기존 대화 기록을 다시 조회할 수 있다.
+2. 회원가입 시 비밀번호를 두 번 입력하여 일치 여부를 확인한다.
+3. 회원가입 후 로그인한다.
+4. 서버가 로그인 성공 시 JWT Access Token을 발급한다.
+5. 사용자가 챗봇 화면에서 질문을 입력한다.
+6. FastAPI 서버가 JWT를 검증하여 로그인 사용자를 확인한다.
+7. 입력값을 검증하고 해당 사용자의 최근 대화 기록을 조회한다.
+8. 최근 대화를 Context로 구성하여 OpenAI API를 호출한다.
+9. GPT-5 nano의 응답을 사용자에게 반환한다.
+10. 질문과 AI 응답을 SQLite DB에 저장한다.
+11. 사용자는 자신의 기존 대화 기록을 다시 조회할 수 있다.
+12. 필요한 경우 삭제 확인 후 자신의 전체 대화 기록을 삭제할 수 있다.
 ```
 
 ---
@@ -112,27 +115,32 @@ SQLite DB 저장
 ## 1.5 핵심 기능
 
 1. 회원가입 및 로그인
-2. PBKDF2 기반 비밀번호 해싱
-3. JWT Access Token 기반 사용자 인증
-4. 로그인 사용자 전용 챗봇 API
-5. 사용자별 대화 이력 접근 제어
-6. Google Gemini API 서버 사이드 연동
-7. 최근 3개 대화를 활용한 Context 구성
-8. 질문/응답 SQLite DB 누적 저장
-9. 사용자 기준 대화 이력 조회
-10. 공백 입력 및 500자 초과 입력 검증
-11. AI API 5초 하드 타임아웃
-12. 최대 3회 AI 호출 시도
-13. Exponential Backoff 기반 재시도
-14. AI API 실패 시 사용자 오류 안내
-15. DB 저장 실패 시 `rollback()`
-16. 주요 처리 단계 서버 로깅
-17. UUID 기반 `request_id` 요청 추적
-18. 사용자 질문 원문을 서버 요청 로그에서 제외
-19. `textContent` 기반 안전한 DOM 렌더링
-20. Railway 외부 배포
-21. Railway Volume을 통한 SQLite DB 영속성 확보
-22. 재배포 이후 사용자 및 대화 기록 유지 검증
+2. 회원가입 비밀번호 재입력 확인
+3. 로그인/회원가입 Enter 키 제출
+4. PBKDF2 기반 비밀번호 해싱
+5. JWT Access Token 기반 사용자 인증
+6. 로그인 사용자 전용 챗봇 API
+7. 사용자별 대화 이력 접근 제어
+8. OpenAI API 서버 사이드 연동
+9. GPT-5 nano 모델 사용
+10. 최근 3개 대화를 활용한 Context 구성
+11. 질문/응답 SQLite DB 누적 저장
+12. 사용자 기준 대화 이력 조회
+13. 사용자 자신의 전체 대화 이력 삭제
+14. 삭제 전 되돌릴 수 없음을 알리는 확인 절차
+15. 공백 입력 및 500자 초과 입력 검증
+16. AI API 하드 타임아웃
+17. 최대 3회 AI 호출 시도
+18. Exponential Backoff 기반 재시도
+19. AI API 실패 시 사용자 오류 안내
+20. DB 저장 실패 시 `rollback()`
+21. 주요 처리 단계 서버 로깅
+22. UUID 기반 `request_id` 요청 추적
+23. 사용자 질문 원문을 서버 요청 로그에서 제외
+24. `textContent` 기반 안전한 DOM 렌더링
+25. Railway 외부 배포
+26. Railway Volume을 통한 SQLite DB 영속성 확보
+27. 재배포 이후 사용자 및 대화 기록 유지 검증
 
 ---
 
@@ -148,7 +156,16 @@ SQLite DB 저장
 https://term-project-proto-production.up.railway.app
 ```
 
-평가자는 위 URL을 통해 회원가입 → 로그인 → 챗봇 질문 → 대화 이력 확인의 전체 흐름을 직접 확인할 수 있습니다.
+평가자는 위 URL을 통해 다음 전체 흐름을 직접 확인할 수 있습니다.
+
+```text
+회원가입
+→ 로그인
+→ 챗봇 질문
+→ AI 응답
+→ 대화 이력 확인
+→ 대화 기록 삭제
+```
 
 ---
 
@@ -173,8 +190,8 @@ https://term-project-proto-production.up.railway.app
        │                │
        ▼                ▼
 ┌──────────────┐   ┌──────────────────┐
-│ Gemini API   │   │ Railway Volume   │
-│              │   │                  │
+│ OpenAI API   │   │ Railway Volume   │
+│ GPT-5 nano   │   │                  │
 │ AI Response  │   │ SQLite DB        │
 └──────────────┘   │ chatbot.db       │
                    └──────────────────┘
@@ -218,12 +235,58 @@ PBKDF2 비밀번호 검증
         ↓
 JWT Access Token 생성
         ↓
-Browser 저장
+Browser localStorage 저장
 ```
+
+백엔드의 보호된 API에서는 JWT를 다시 검증하므로 단순히 프론트엔드 화면을 숨기는 방식에 의존하지 않습니다.
 
 ---
 
-## Step 3. Web UI 및 FastAPI Routing
+## Step 3. 회원가입 UX
+
+회원가입 화면에서는 다음 기능을 적용했습니다.
+
+- 아이디 입력
+- 비밀번호 입력
+- 비밀번호 확인 입력
+- 비밀번호 일치 여부 검증
+- 최소 입력 길이 사전 검증
+- Enter 키 회원가입
+- FastAPI/Pydantic 오류 메시지 처리
+- `[object Object]` 형태의 오류 출력 방지
+- 요청 중 버튼 비활성화를 통한 중복 요청 방지
+
+비밀번호와 비밀번호 확인 값이 일치하지 않으면 서버에 회원가입 요청을 보내기 전에 클라이언트에서 차단합니다.
+
+---
+
+## Step 4. 로그인 UX
+
+로그인 화면에서는 HTML `<form>`의 `submit` 이벤트를 사용합니다.
+
+따라서 다음 두 동작이 동일한 로그인 함수로 연결됩니다.
+
+```text
+로그인 버튼 클릭
+       ↓
+form submit
+       ↓
+login()
+
+Enter 키
+       ↓
+form submit
+       ↓
+login()
+```
+
+로그인 요청 중에는 버튼을 일시적으로 비활성화하여 중복 요청을 방지합니다.
+
+또한 FastAPI의 오류 응답 구조를 처리하여 잘못된 입력이 `[object Object]`로 출력되지 않도록 구성했습니다.
+
+---
+
+## Step 5. Web UI 및 FastAPI Routing
 
 HTML 템플릿은 다음과 같이 분리했습니다.
 
@@ -243,46 +306,53 @@ GET /register
 GET /chat
 ```
 
-API:
+주요 API:
 
 ```text
-POST /api/auth/register
-POST /api/auth/login
-POST /api/chat
-GET  /api/me/chats
+POST   /api/auth/register
+POST   /api/auth/login
+POST   /api/chat
+GET    /api/me/chats
+DELETE /api/me/chats
 ```
 
 ---
 
-## Step 4. Gemini API 연동
+## Step 6. OpenAI API 연동
 
-`ai_service.py`에서 Google GenAI SDK의 비동기 API를 사용합니다.
+`ai_service.py`에서 OpenAI API를 서버 사이드에서 호출합니다.
 
-```python
-client.aio.models.generate_content(...)
+현재 AI 모델은 다음 모델을 사용합니다.
+
+```text
+gpt-5-nano
 ```
 
-Gemini 모델은 FastAPI 서버에서 호출하며 API Key는 브라우저에 전달하지 않습니다.
+API 호출 구조:
 
 ```text
 Browser
    ↓
 FastAPI
    ↓
-GEMINI_API_KEY
+OPENAI_API_KEY
    ↓
-Google Gemini API
+OpenAI API
+   ↓
+GPT-5 nano
    ↓
 FastAPI
    ↓
 Browser
 ```
 
-따라서 사용자가 브라우저에서 Gemini API Key를 직접 확인할 수 없습니다.
+`OPENAI_API_KEY`는 FastAPI 서버의 환경 변수로 관리되며 브라우저 JavaScript에 전달하지 않습니다.
+
+따라서 사용자가 브라우저에서 OpenAI API Key를 직접 확인할 수 없도록 구성했습니다.
 
 ---
 
-## Step 5. 대화 Context 구성
+## Step 7. 대화 Context 구성
 
 로그인 사용자의 최근 3개 대화를 DB에서 조회합니다.
 
@@ -296,7 +366,7 @@ created_at DESC
 LIMIT 3
 ```
 
-AI에 전달할 때는 다시 과거 → 최신 순서로 구성합니다.
+AI에 전달할 때는 대화 순서를 고려하여 이전 질문/응답과 현재 질문을 Context로 구성합니다.
 
 ```text
 이전 User 질문
@@ -306,26 +376,26 @@ AI에 전달할 때는 다시 과거 → 최신 순서로 구성합니다.
 → 현재 User 질문
 ```
 
-이를 통해 전체 대화 기록을 AI에 계속 전달하지 않으면서 최근 대화의 문맥을 유지합니다.
+이를 통해 모든 과거 대화를 무제한으로 AI에 전달하지 않으면서 최소한의 대화 문맥을 유지합니다.
 
 ---
 
-## Step 6. AI Timeout
+## Step 8. AI Timeout
 
-AI API가 응답하지 않는 상황에서 서버가 무한 대기하지 않도록 `asyncio.wait_for()`를 사용합니다.
+AI API가 장시간 응답하지 않는 상황에서 서버가 무한 대기하지 않도록 명시적인 타임아웃을 적용했습니다.
+
+현재 설정:
 
 ```text
-TIMEOUT_SECONDS = 5.0
+TIMEOUT_SECONDS = 20.0
 ```
 
 처리 구조:
 
 ```text
-Gemini API
+OpenAI API
     ↓
-asyncio.wait_for()
-    ↓
-5초 이내 응답?
+20초 이내 응답?
  ┌──┴───┐
 Yes     No
  │       │
@@ -334,19 +404,13 @@ Yes     No
        Retry
 ```
 
+무료/제한된 API 환경이나 외부 AI 서비스의 응답 지연 가능성을 고려하여, 일정 시간 이상 응답이 없으면 요청을 종료하고 재시도 또는 오류 안내를 수행합니다.
+
 ---
 
-## Step 7. Retry 및 Exponential Backoff
+## Step 9. Retry 및 Exponential Backoff
 
-일시적인 API 장애에 대응하기 위해 최대 3회의 호출을 시도합니다.
-
-재시도 대상에는 다음과 같은 상황이 포함됩니다.
-
-- Timeout
-- `429 RESOURCE_EXHAUSTED`
-- `503 UNAVAILABLE`
-
-Backoff 구조:
+일시적인 API 장애에 대응하기 위해 최대 3회의 AI 호출을 시도하도록 구성했습니다.
 
 ```text
 1차 호출
@@ -368,11 +432,11 @@ Backoff 구조:
 사용자 오류 안내
 ```
 
-이를 통해 일시적인 Gemini API 장애가 발생하더라도 FastAPI 서버 자체가 종료되지 않습니다.
+일시적인 API 오류가 발생하더라도 FastAPI 서버 자체가 비정상 종료되지 않도록 예외를 처리합니다.
 
 ---
 
-## Step 8. DB 저장 및 Rollback
+## Step 10. DB 저장 및 Rollback
 
 AI 응답을 받은 후 사용자 질문과 응답을 `ChatLog`에 저장합니다.
 
@@ -384,6 +448,8 @@ ChatLog 생성
 db.add()
    ↓
 db.commit()
+   ↓
+db.refresh()
 ```
 
 DB 저장 중 오류가 발생하면:
@@ -396,7 +462,77 @@ db.rollback()
 
 ---
 
-## Step 9. request_id 기반 로그 추적
+## Step 11. 사용자별 대화 기록 조회
+
+다음 API를 통해 현재 로그인한 사용자의 대화 기록만 조회합니다.
+
+```text
+GET /api/me/chats
+```
+
+조회 조건:
+
+```text
+JWT
+ ↓
+current_user
+ ↓
+current_user.id
+ ↓
+ChatLog.user_id == current_user.id
+ ↓
+해당 사용자의 기록만 반환
+```
+
+따라서 다른 사용자의 대화 기록은 조회할 수 없습니다.
+
+---
+
+## Step 12. 사용자별 대화 기록 삭제
+
+대화 기록이 계속 누적되어 화면이 복잡해지는 문제를 개선하기 위해 전체 대화 삭제 기능을 추가했습니다.
+
+API:
+
+```text
+DELETE /api/me/chats
+```
+
+삭제 조건:
+
+```text
+JWT 인증
+   ↓
+current_user.id 확인
+   ↓
+ChatLog.user_id == current_user.id
+   ↓
+현재 사용자의 ChatLog만 삭제
+```
+
+다른 사용자의 기록에는 영향을 주지 않습니다.
+
+삭제 성공 시 서버 로그에 다음 정보를 기록합니다.
+
+```text
+chat_history_delete_success
+user_id
+deleted_count
+```
+
+실패 시:
+
+```text
+chat_history_delete_failed
+```
+
+를 기록하고 DB 트랜잭션을 `rollback()`합니다.
+
+또한 사용자가 실수로 기록을 삭제하는 것을 방지하기 위해 프론트엔드에서 **삭제 후 되돌릴 수 없음을 안내하고 확인을 받은 후 삭제 요청을 수행**하도록 구성했습니다.
+
+---
+
+## Step 13. request_id 기반 로그 추적
 
 각 `/api/chat` 요청에는 UUID 기반 `request_id`가 생성됩니다.
 
@@ -425,9 +561,9 @@ ai_call_success request_id=b67c61c2-... attempt=1
 db_save_success request_id=b67c61c2-... user_id=1 chat_id=4
 ```
 
-따라서 동시에 여러 요청이 발생해도 하나의 요청 처리 흐름을 추적할 수 있습니다.
+따라서 동시에 여러 요청이 발생하더라도 하나의 요청 처리 흐름을 추적할 수 있습니다.
 
-또한 서버 요청 로그에는 질문 원문을 기록하지 않고 다음 정보만 기록합니다.
+사용자의 실제 질문 내용은 서버 요청 로그에 기록하지 않고 다음 정보만 기록합니다.
 
 ```text
 request_id
@@ -437,7 +573,7 @@ question_length
 
 ---
 
-## Step 10. 안전한 DOM 렌더링
+## Step 14. 안전한 DOM 렌더링
 
 `chat.html`에서는 사용자 질문과 AI 응답을 출력할 때 외부 문자열을 `innerHTML`로 직접 삽입하지 않습니다.
 
@@ -489,6 +625,7 @@ messageText.textContent = String(message ?? '');
 │ - JWT Authentication         │
 │ - request_id                 │
 │ - Server Logging             │
+│ - Chat History Delete        │
 └───────┬─────────────┬────────┘
         │             │
         ▼             ▼
@@ -496,14 +633,16 @@ messageText.textContent = String(message ?? '');
 │   auth.py    │ │    ai_service.py    │
 │              │ │                     │
 │ - PBKDF2     │ │ - Context           │
-│ - JWT        │ │ - Gemini API        │
+│ - JWT        │ │ - OpenAI API        │
+│              │ │ - GPT-5 nano        │
 │              │ │ - Timeout           │
 │              │ │ - Retry / Backoff   │
 └──────────────┘ └──────────┬──────────┘
                             │
                             ▼
                   ┌─────────────────────┐
-                  │ Google Gemini API   │
+                  │     OpenAI API      │
+                  │     GPT-5 nano      │
                   └─────────────────────┘
 
         FastAPI
@@ -532,14 +671,14 @@ messageText.textContent = String(message ?? '');
 
 | 파일 / 디렉터리 | 역할 |
 | --- | --- |
-| `main.py` | FastAPI 앱, 페이지/API 라우팅, 입력 검증, JWT 인증 연결, `request_id` 생성, DB 저장, 서버 로깅 |
+| `main.py` | FastAPI 앱, 페이지/API 라우팅, 입력 검증, JWT 인증 연결, `request_id` 생성, DB 저장/조회/삭제, 서버 로깅 |
 | `auth.py` | PBKDF2 비밀번호 해싱, JWT 생성 및 인증 사용자 조회 |
-| `ai_service.py` | Gemini API, Context 구성, Timeout, Retry, Exponential Backoff, AI 예외 처리 |
+| `ai_service.py` | OpenAI API, GPT-5 nano 호출, Context 구성, Timeout, Retry, Exponential Backoff, AI 예외 처리 |
 | `database.py` | SQLite / SQLAlchemy 엔진 및 DB 세션 관리 |
 | `models.py` | `User`, `ChatLog` ORM 모델 |
-| `templates/login.html` | 로그인 UI |
-| `templates/register.html` | 회원가입 UI |
-| `templates/chat.html` | 챗봇 UI, 대화 이력 출력, 안전한 DOM 렌더링 |
+| `templates/login.html` | 로그인 UI, Enter 제출, 로그인 오류 처리 |
+| `templates/register.html` | 회원가입 UI, 비밀번호 확인, Enter 제출, 검증 오류 처리 |
+| `templates/chat.html` | 챗봇 UI, 대화 이력 출력/삭제, 안전한 DOM 렌더링 |
 | `tests/` | 입력 검증 자동화 테스트 |
 
 ---
@@ -558,6 +697,8 @@ Request:
   "password": "password123"
 }
 ```
+
+> 비밀번호 확인 값은 프론트엔드에서 비밀번호 일치 여부를 확인하기 위한 값이며, 일치 확인 후 실제 API에는 `username`과 `password`만 전달합니다.
 
 Response:
 
@@ -639,7 +780,7 @@ Response:
 ```json
 {
   "question": "FastAPI의 장점이 뭐야?",
-  "response": "FastAPI는 비동기 처리 지원, Pydantic 기반 입력 검증 등의 장점이 있습니다."
+  "response": "FastAPI는 비동기 처리와 Pydantic 기반 입력 검증 등을 지원합니다."
 }
 ```
 
@@ -690,11 +831,32 @@ Response:
 
 현재 로그인한 사용자 자신의 대화 기록만 반환합니다.
 
-인증 정보가 없는 경우:
+---
+
+## 6.5 내 대화 이력 전체 삭제
+
+### `DELETE /api/me/chats`
+
+로그인이 필요한 API입니다.
+
+Header:
 
 ```text
-401 Unauthorized
+Authorization: Bearer <access_token>
 ```
+
+Response 예시:
+
+```json
+{
+  "message": "대화 기록이 삭제되었습니다.",
+  "deleted_count": 5
+}
+```
+
+현재 로그인한 사용자의 `ChatLog`만 삭제합니다.
+
+다른 사용자의 대화 기록은 삭제되지 않습니다.
 
 ---
 
@@ -727,37 +889,12 @@ FastAPI get_current_user
 다음 API는 로그인 사용자만 접근할 수 있습니다.
 
 ```text
-POST /api/chat
-GET  /api/me/chats
+POST   /api/chat
+GET    /api/me/chats
+DELETE /api/me/chats
 ```
 
 백엔드 API에서 JWT를 직접 검증하므로 프론트엔드의 페이지 이동 제한에만 의존하지 않습니다.
-
-배포 환경에서도 인증 없이 다음 API를 직접 호출하여 접근 제어를 검증했습니다.
-
-```text
-POST /api/chat
-→ 401 Unauthorized
-
-GET /api/me/chats
-→ 401 Unauthorized
-```
-
-올바른 계정으로 로그인한 경우:
-
-```text
-POST /api/auth/login
-→ 200 OK
-→ JWT Access Token 발급
-```
-
-발급된 JWT를 사용한 경우:
-
-```text
-GET /api/me/chats
-→ 200 OK
-→ 현재 사용자의 대화 이력 반환
-```
 
 ---
 
@@ -792,6 +929,18 @@ SQLite + SQLAlchemy ORM을 사용합니다.
 
 Railway 배포 환경에서 SQLite DB를 영속적으로 유지하기 위해 Persistent Volume을 사용합니다.
 
+Railway:
+
+```text
+DATABASE_URL
+      ↓
+sqlite:////data/chatbot.db
+      ↓
+/data
+      ↓
+Railway Persistent Volume
+```
+
 이를 통해 애플리케이션이 재배포되어 컨테이너가 교체되더라도 DB 데이터가 유지되도록 구성했습니다.
 
 실제 검증 과정:
@@ -806,20 +955,6 @@ Railway 배포 환경에서 SQLite DB를 영속적으로 유지하기 위해 Per
 ```
 
 재배포 이후에도 기존 계정과 대화 기록이 그대로 조회되는 것을 확인했습니다.
-
-```text
-Railway Redeploy
-      ↓
-Application Container 교체
-      ↓
-Persistent Volume 재연결
-      ↓
-SQLite DB 유지
-      ↓
-User 유지
-      ↓
-ChatLog 유지
-```
 
 ---
 
@@ -853,7 +988,7 @@ Value error, 질문은 공백일 수 없습니다.
 
 질문 최대 길이는 500자입니다.
 
-501자를 전달한 경우 배포 환경에서:
+501자를 전달한 경우:
 
 ```text
 HTTP 422 Unprocessable Content
@@ -873,14 +1008,18 @@ String should have at most 500 characters
 
 ## 11.1 AI Timeout
 
-Gemini API 호출에는 5초 하드 타임아웃을 적용했습니다.
+OpenAI API 호출에는 명시적인 하드 타임아웃을 적용했습니다.
+
+현재 설정:
 
 ```text
-Gemini API
+TIMEOUT_SECONDS = 20.0
+```
+
+```text
+OpenAI API
     ↓
-asyncio.wait_for()
-    ↓
-5초 초과
+20초 초과
     ↓
 Timeout
     ↓
@@ -911,15 +1050,6 @@ Retry
 
 최종 실패 시 서버 프로세스를 종료하지 않고 사용자에게 오류 안내를 반환합니다.
 
-예:
-
-```text
-AI 서비스가 현재 혼잡합니다.
-잠시 후 다시 시도해 주세요.
-```
-
-실제 Railway 환경에서도 Gemini 호출이 일시적으로 실패한 뒤 서비스 자체는 정상적으로 유지되고 이후 요청에서 AI 응답이 정상적으로 반환되는 것을 확인했습니다.
-
 ---
 
 ## 11.3 DB 실패 처리
@@ -936,11 +1066,13 @@ db.rollback()
 
 DB 저장 실패 시 `rollback()`을 실행하여 실패한 트랜잭션 상태를 정리합니다.
 
+대화 기록 삭제 중 DB 오류가 발생한 경우에도 동일하게 `rollback()`을 수행합니다.
+
 ---
 
 # 12. 서버 로그
 
-다음 이벤트를 기록합니다.
+AI 채팅 처리 과정에서 다음과 같은 주요 이벤트를 기록합니다.
 
 ```text
 request_received
@@ -952,15 +1084,11 @@ db_save_success
 db_save_failed
 ```
 
-예:
+대화 삭제 과정에서는 다음 이벤트도 기록합니다.
 
 ```text
-INFO:app_logger:request_received request_id=4c4ada56-... user_id=2 question_length=16
-INFO:     ai_call_start request_id=4c4ada56-... prompt_length=16 context_count=0
-ERROR:    ai_call_failed request_id=4c4ada56-... attempt=1 reason=timeout
-INFO:     ai_call_retry request_id=4c4ada56-... attempt=1 wait=2s
-INFO:     ai_call_success request_id=4c4ada56-... attempt=2
-INFO:app_logger:db_save_success request_id=4c4ada56-... user_id=2 chat_id=9
+chat_history_delete_success
+chat_history_delete_failed
 ```
 
 동일한 `request_id`를 통해:
@@ -979,7 +1107,7 @@ INFO:app_logger:db_save_success request_id=4c4ada56-... user_id=2 chat_id=9
 
 ---
 
-# 13. 대화 로그 확인 가이드
+# 13. 대화 로그 확인 및 관리 가이드
 
 ## 13.1 웹 화면
 
@@ -990,6 +1118,10 @@ GET /api/me/chats
 ```
 
 를 호출하여 현재 로그인한 사용자의 기존 대화 기록을 화면에 표시합니다.
+
+사용자는 대화 기록 삭제 기능을 통해 자신의 대화를 정리할 수 있습니다.
+
+삭제 전에는 복구할 수 없다는 경고를 표시하여 사용자의 확인을 받습니다.
 
 ---
 
@@ -1011,20 +1143,30 @@ curl \
   https://term-project-proto-production.up.railway.app/api/me/chats
 ```
 
-응답:
+---
 
-```json
-[
-  {
-    "id": 1,
-    "question": "질문",
-    "response": "AI 응답",
-    "time": "2026-08-14T09:47:35"
-  }
-]
+## 13.3 API 삭제
+
+```bash
+curl -i -X DELETE \
+  https://term-project-proto-production.up.railway.app/api/me/chats \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-이를 통해 평가 시 사용자 기준 로그 저장 및 조회 여부를 직접 검증할 수 있습니다.
+성공 시:
+
+```text
+200 OK
+```
+
+예:
+
+```json
+{
+  "message": "대화 기록이 삭제되었습니다.",
+  "deleted_count": 5
+}
+```
 
 ---
 
@@ -1069,7 +1211,7 @@ HTML 제목으로 실행되지 않고 일반 문자열로 표시됩니다.
 - 실제 `<img>` 요소 생성 안 됨
 - `onerror` 실행 안 됨
 - JavaScript Alert 발생 안 함
-- 문자열 자체는 정상적으로 Gemini API에 전달됨
+- 문자열 자체는 AI 질문으로 전달 가능
 
 따라서 채팅 메시지 출력 과정에서 사용자 입력을 HTML 코드로 직접 해석하지 않도록 구성했습니다.
 
@@ -1084,7 +1226,7 @@ HTML 제목으로 실행되지 않고 일반 문자열로 표시됩니다.
 ```text
 SECRET_KEY
 ALGORITHM
-GEMINI_API_KEY
+OPENAI_API_KEY
 DATABASE_URL
 ```
 
@@ -1101,32 +1243,30 @@ DATABASE_URL
 ```env
 SECRET_KEY=your_secret_key_here
 ALGORITHM=HS256
-GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
 DATABASE_URL=sqlite:///./chatbot.db
 ```
-
-로컬 환경에서는 프로젝트 디렉터리의 `chatbot.db`를 사용합니다.
 
 ---
 
 ## 15.2 Railway 환경 변수
 
-Railway에서는 Railway Variables에 다음 환경 변수를 등록합니다.
+Railway에서는 Variables에 다음 환경 변수를 등록합니다.
 
 ```text
 SECRET_KEY
 ALGORITHM
-GEMINI_API_KEY
+OPENAI_API_KEY
 DATABASE_URL
 ```
 
-Railway Persistent Volume을 `/data`에 연결한 경우 DB 경로는 다음과 같이 설정합니다.
+Railway Persistent Volume을 `/data`에 연결한 경우:
 
 ```env
 DATABASE_URL=sqlite:////data/chatbot.db
 ```
 
-즉:
+환경별 DB 위치:
 
 ```text
 Local
@@ -1135,8 +1275,6 @@ DATABASE_URL=sqlite:///./chatbot.db
 Railway
 DATABASE_URL=sqlite:////data/chatbot.db
 ```
-
-와 같이 환경에 따라 DB 위치를 구분합니다.
 
 ---
 
@@ -1147,15 +1285,26 @@ DATABASE_URL=sqlite:////data/chatbot.db
 ```env
 SECRET_KEY=your_secret_key_here
 ALGORITHM=HS256
-GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
 
-# Local SQLite database
-DATABASE_URL=sqlite:///./chatbot.db
+# 로컬에서는 생략 가능
+# Railway 배포 예시:
+DATABASE_URL=sqlite:////data/chatbot.db
 ```
+
+로컬에서 `DATABASE_URL`을 생략하면 `database.py`의 기본값:
+
+```text
+sqlite:///./chatbot.db
+```
+
+을 사용합니다.
 
 ---
 
 ## 15.4 `.gitignore`
+
+예:
 
 ```gitignore
 .env
@@ -1175,7 +1324,7 @@ __pycache__/
 
 이를 통해 다음 항목이 GitHub에 직접 노출되지 않도록 합니다.
 
-- Gemini API Key
+- OpenAI API Key
 - JWT Secret Key
 - 로컬 SQLite DB
 - Python 가상환경
@@ -1218,6 +1367,23 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+주요 Dependency:
+
+```text
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+python-dotenv
+openai
+httpx
+passlib
+python-jose[cryptography]
+jinja2
+python-multipart
+pytest
+```
+
 ---
 
 ## 16.4 환경 변수 설정
@@ -1233,11 +1399,11 @@ cp .env.example .env
 ```env
 SECRET_KEY=<your-secret-key>
 ALGORITHM=HS256
-GEMINI_API_KEY=<your-gemini-api-key>
+OPENAI_API_KEY=<your-openai-api-key>
 DATABASE_URL=sqlite:///./chatbot.db
 ```
 
-> 로컬 실행에서는 `sqlite:///./chatbot.db`를 사용합니다. Railway의 `/data` 경로는 로컬 실행용 경로가 아닙니다.
+> 실제 OpenAI API Key는 GitHub에 Commit하지 않습니다.
 
 ---
 
@@ -1247,14 +1413,12 @@ DATABASE_URL=sqlite:///./chatbot.db
 pytest -v
 ```
 
-현재 입력 검증 테스트:
+입력 검증 테스트 예:
 
 ```text
 tests/test_validation.py::test_valid_question PASSED
 tests/test_validation.py::test_whitespace_question_rejected PASSED
 tests/test_validation.py::test_question_too_long_rejected PASSED
-
-3 passed
 ```
 
 ---
@@ -1263,13 +1427,6 @@ tests/test_validation.py::test_question_too_long_rejected PASSED
 
 ```bash
 uvicorn main:app --reload
-```
-
-정상 실행:
-
-```text
-INFO: Uvicorn running on http://127.0.0.1:8000
-INFO: Application startup complete.
 ```
 
 브라우저:
@@ -1297,7 +1454,7 @@ Railway에서 다음 환경 변수를 설정합니다.
 ```text
 SECRET_KEY
 ALGORITHM
-GEMINI_API_KEY
+OPENAI_API_KEY
 DATABASE_URL
 ```
 
@@ -1313,8 +1470,6 @@ DATABASE_URL=sqlite:////data/chatbot.db
 
 ## 17.2 Persistent Volume
 
-배포 환경의 SQLite DB는 Railway Persistent Volume을 통해 유지합니다.
-
 ```text
 FastAPI
    ↓
@@ -1325,28 +1480,33 @@ DATABASE_URL
 Railway Persistent Volume
 ```
 
-따라서 단순 컨테이너 파일 시스템에만 DB를 저장하는 방식과 달리 재배포 이후에도 사용자 및 `ChatLog` 데이터를 유지할 수 있습니다.
+따라서 재배포 이후에도 사용자 및 `ChatLog` 데이터를 유지할 수 있습니다.
 
 ---
 
 # 18. Production 검증 결과
 
-Railway에 배포한 실제 서비스를 대상으로 다음 테스트를 수행했습니다.
+Railway에 배포한 실제 서비스를 대상으로 다음 기능을 검증했습니다.
 
 | 테스트 | 결과 |
 | --- | --- |
 | 외부 서비스 URL 접근 | ✅ |
 | 회원가입 | ✅ |
+| 회원가입 비밀번호 확인 | ✅ |
+| 회원가입 Enter 제출 | ✅ |
 | 로그인 | ✅ |
+| 로그인 Enter 제출 | ✅ |
 | 올바른 로그인 → JWT 발급 | ✅ |
 | 잘못된 로그인 → `401` | ✅ |
+| 로그인/회원가입 오류 메시지 처리 | ✅ |
 | `/api/chat` 인증 없음 → `401` | ✅ |
 | `/api/me/chats` 인증 없음 → `401` | ✅ |
 | JWT + `/api/me/chats` → `200` | ✅ |
 | 사용자별 기존 대화 조회 | ✅ |
-| Gemini API 정상 응답 | ✅ |
-| Gemini API 실패 시 서버 유지 | ✅ |
-| Retry 이후 AI 응답 성공 | ✅ |
+| 사용자별 대화 기록 삭제 | ✅ |
+| OpenAI API 연동 | ✅ |
+| GPT-5 nano AI 응답 | ✅ |
+| AI API 실패 시 서버 유지 | ✅ |
 | ChatLog DB 저장 | ✅ |
 | 공백 질문 → `422` | ✅ |
 | 501자 질문 → `422` | ✅ |
@@ -1414,8 +1574,6 @@ curl -i -X POST \
 ---
 
 ## 19.4 JWT 저장
-
-로그인 응답에서 받은 Access Token을 사용합니다.
 
 ```bash
 TOKEN='<access_token>'
@@ -1493,6 +1651,32 @@ curl -i -X POST \
 
 ---
 
+## 19.9 대화 기록 삭제
+
+```bash
+curl -i -X DELETE \
+  https://term-project-proto-production.up.railway.app/api/me/chats \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+예상:
+
+```text
+200 OK
+```
+
+삭제 후 다시:
+
+```bash
+curl -i \
+  https://term-project-proto-production.up.railway.app/api/me/chats \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+를 실행하여 해당 사용자의 기록이 삭제되었는지 확인할 수 있습니다.
+
+---
+
 # 20. 팀 협업 및 역할 분담 계획
 
 본 PoC를 팀 프로젝트의 기술적 베이스라인으로 활용할 예정입니다.
@@ -1564,18 +1748,6 @@ git commit -m "feat: add chat loading state"
 git push origin feat/chat-ui
 ```
 
-이후:
-
-```text
-feat/chat-ui
-     ↓
-Pull Request
-     ↓
-Code Review
-     ↓
-develop
-```
-
 ---
 
 # 22. 현재 구현 상태
@@ -1583,8 +1755,13 @@ develop
 ## 22.1 PoC 완료
 
 - [x] FastAPI 웹 서버
+- [x] HTML / CSS / JavaScript + Jinja2 Frontend
 - [x] 회원가입
+- [x] 비밀번호 확인 입력
+- [x] 회원가입 Enter 제출
 - [x] 로그인
+- [x] 로그인 Enter 제출
+- [x] 회원가입/로그인 오류 메시지 개선
 - [x] PBKDF2 비밀번호 해싱
 - [x] JWT Access Token
 - [x] 로그인 사용자 전용 챗봇 API
@@ -1594,13 +1771,17 @@ develop
 - [x] User / ChatLog 1:N 구조
 - [x] 사용자별 ChatLog 저장
 - [x] `GET /api/me/chats`
+- [x] `DELETE /api/me/chats`
+- [x] 대화 기록 삭제 확인 절차
 - [x] 최근 3개 대화 Context
-- [x] Gemini API Backend 연동
-- [x] 5초 하드 타임아웃
+- [x] OpenAI API Backend 연동
+- [x] GPT-5 nano 모델
+- [x] AI API 하드 타임아웃
 - [x] 최대 3회 AI 호출
 - [x] Exponential Backoff
 - [x] AI API 예외 처리
 - [x] DB 저장 실패 `rollback()`
+- [x] DB 삭제 실패 `rollback()`
 - [x] 주요 서버 이벤트 로깅
 - [x] UUID 기반 `request_id`
 - [x] 사용자 질문 원문 요청 로그 제외
@@ -1618,9 +1799,10 @@ develop
 - [x] Railway 외부 배포
 - [x] 외부 접근 가능한 서비스 URL
 - [x] Railway 환경 변수 설정
+- [x] `OPENAI_API_KEY` Railway 환경 변수 설정
 - [x] 배포 환경 회원가입/로그인 검증
 - [x] 배포 환경 JWT 인증 검증
-- [x] 배포 환경 Gemini API 검증
+- [x] 배포 환경 OpenAI API 검증
 - [x] 배포 환경 ChatLog 저장/조회 검증
 - [x] 배포 환경 입력 검증
 - [x] Railway Persistent Volume
@@ -1653,13 +1835,14 @@ develop
 | 로그인 | ✅ |
 | 인증 상태 기반 접근 제어 | ✅ |
 | 챗봇 로그인 사용자 전용 | ✅ |
-| 서버에서 AI API 호출 | ✅ |
+| 서버에서 AI API 호출 | ✅ OpenAI API |
 | API Key 서버 관리 | ✅ |
 | 최소 Context 전략 | ✅ 최근 3개 대화 |
 | 질문/응답 DB 누적 저장 | ✅ |
 | 사용자 식별 정보 저장 | ✅ |
 | 생성 시각 저장 | ✅ |
 | 사용자 기준 로그 조회 | ✅ |
+| 사용자 기준 로그 삭제 | ✅ |
 | 요청 수신 로그 | ✅ |
 | AI 호출 로그 | ✅ |
 | AI 성공/실패 로그 | ✅ |
@@ -1705,7 +1888,9 @@ Pydantic 입력 검증
   ↓
 최근 ChatLog Context 조회
   ↓
-Google Gemini API
+OpenAI API
+  ↓
+GPT-5 nano
   ↓
 Timeout / Retry / Backoff
   ↓
@@ -1715,13 +1900,15 @@ SQLite ChatLog 저장
   ↓
 Persistent Volume
   ↓
-사용자별 대화 이력 조회
+사용자별 대화 이력 조회 / 삭제
   ↓
 안전한 DOM 렌더링
   ↓
 웹 화면 출력
 ```
 
-따라서 현재 PoC에서는 **Web + Authentication + DB + AI API + Logging + Error Handling + Deployment + Persistence**의 핵심 통합 흐름을 구축했습니다.
+따라서 현재 PoC에서는 **Web + Authentication + DB + AI API + Context + Logging + Error Handling + Deployment + Persistence**의 핵심 통합 흐름을 구축했습니다.
+
+또한 회원가입 비밀번호 확인, Enter 키 제출, 대화 기록 삭제, 안전한 DOM 렌더링 등 실제 사용 과정에서 필요한 UX 및 보안 요소를 추가했습니다.
 
 다음 단계에서는 이 PoC를 팀 프로젝트의 기술적 베이스라인으로 사용하고, 실제 팀원들과 `develop` 및 기능 브랜치, PR 기반 Merge, 팀원별 Commit 이력을 구축하여 최종 Term Project로 확장하는 것을 목표로 합니다.

@@ -149,7 +149,10 @@
                 <b id="user-display"></b>
             </span>
 
-            <button class="logout-btn" onclick="logout()">
+            <button
+                class="logout-btn"
+                onclick="logout()"
+            >
                 로그아웃
             </button>
         </div>
@@ -168,12 +171,15 @@
     </div>
 
 
+    <!-- 채팅 메시지 영역 -->
     <div id="chat-box"></div>
 
 
+    <!-- 질문 입력 영역 -->
     <div class="input-wrapper">
 
         <div class="input-group">
+
             <input
                 type="text"
                 id="question"
@@ -181,9 +187,13 @@
                 maxlength="500"
             >
 
-            <button id="send-btn" onclick="sendMsg()">
+            <button
+                id="send-btn"
+                onclick="sendMsg()"
+            >
                 전송
             </button>
+
         </div>
 
         <div
@@ -197,39 +207,102 @@
 
 
     <script>
-        const token = localStorage.getItem('token');
-        const currentUsername = localStorage.getItem('username');
 
+        // -----------------------------------------------------------
+        // 현재 사용자명
+        //
+        // 화면 표시용이며 실제 인증은 JWT로 수행합니다.
+        // -----------------------------------------------------------
+        const currentUsername =
+            localStorage.getItem('username');
+
+
+        // 질문 최대 길이
         const MAX_QUESTION_LENGTH = 500;
 
-        // 모든 화면 표시 시간은 한국 표준시(KST) 기준
-        const DISPLAY_TIME_ZONE = 'Asia/Seoul';
 
-        // 현재 화면에 마지막으로 표시된 날짜
+        // 화면 시간대
+        const DISPLAY_TIME_ZONE =
+            'Asia/Seoul';
+
+
+        // 마지막으로 화면에 표시된 날짜
         let lastDisplayedDate = null;
 
 
         // -----------------------------------------------------------
-        // 페이지 로드 시 인증 확인
+        // 현재 JWT Access Token 조회
+        //
+        // token을 페이지 시작 시 한 번만 읽지 않고,
+        // 필요한 시점마다 localStorage에서 다시 읽습니다.
+        //
+        // 로그아웃 이후 Back/Forward로 이전 화면이 복원되는 경우
+        // 오래된 token 값을 계속 사용하는 것을 방지합니다.
         // -----------------------------------------------------------
-        window.addEventListener('load', () => {
-            if (!token) {
-                alert('로그인이 필요합니다.');
-                window.location.href = '/login';
-                return;
+        function getToken() {
+            return localStorage.getItem('token');
+        }
+
+
+        // -----------------------------------------------------------
+        // 현재 인증 상태 확인
+        //
+        // JWT가 없다면 보호된 chat 페이지를 사용할 수 없도록
+        // 로그인 페이지로 이동합니다.
+        // -----------------------------------------------------------
+        function checkAuthentication() {
+
+            if (!getToken()) {
+
+                window.location.replace('/login');
+
+                return false;
             }
 
-            document.getElementById('user-display').textContent =
-                currentUsername || '사용자';
-
-            loadChatHistory();
-        });
+            return true;
+        }
 
 
         // -----------------------------------------------------------
-        // 질문 글자 수 실시간 표시
+        // 페이지 최초 로드
+        // -----------------------------------------------------------
+        window.addEventListener(
+            'load',
+            () => {
+
+                if (!checkAuthentication()) {
+                    return;
+                }
+
+                document
+                    .getElementById('user-display')
+                    .textContent =
+                        currentUsername || '사용자';
+
+                loadChatHistory();
+            }
+        );
+
+
+        // -----------------------------------------------------------
+        // 브라우저 Back / Forward 대응
         //
-        // Backend의 Pydantic max_length=500과 동일한 기준
+        // BFCache에서 이전 /chat 화면이 복원되는 경우에도
+        // pageshow 이벤트가 발생하므로 token을 다시 검사합니다.
+        //
+        // 로그아웃 후 뒤로가기를 하더라도
+        // token이 없으면 즉시 /login으로 이동합니다.
+        // -----------------------------------------------------------
+        window.addEventListener(
+            'pageshow',
+            () => {
+                checkAuthentication();
+            }
+        );
+
+
+        // -----------------------------------------------------------
+        // 질문 입력창 / 글자 수 Counter
         // -----------------------------------------------------------
         const questionInput =
             document.getElementById('question');
@@ -237,53 +310,97 @@
         const charCounter =
             document.getElementById('char-counter');
 
-        questionInput.addEventListener('input', () => {
-            const currentLength =
-                questionInput.value.length;
 
-            const remaining =
-                MAX_QUESTION_LENGTH - currentLength;
+        // -----------------------------------------------------------
+        // 질문 글자 수 실시간 표시
+        //
+        // Backend의 Pydantic max_length=500과
+        // 동일한 제한을 Frontend에도 적용합니다.
+        //
+        // Korean/English mixed input, 붙여넣기, IME 입력 등으로
+        // 혹시 500자를 초과하는 값이 들어오는 경우에도
+        // 실제 문자열을 500자로 잘라냅니다.
+        //
+        // 또한 Math.max()를 사용하여
+        // "-1자 남음" 같은 음수 표시가 절대로 나오지 않게 합니다.
+        // -----------------------------------------------------------
+        questionInput.addEventListener(
+            'input',
+            () => {
 
-            charCounter.textContent =
-                `${remaining}자 남음`;
-        });
+                // 500자를 초과한 경우 강제로 500자까지만 유지
+                if (
+                    questionInput.value.length
+                    > MAX_QUESTION_LENGTH
+                ) {
+
+                    questionInput.value =
+                        questionInput.value.slice(
+                            0,
+                            MAX_QUESTION_LENGTH
+                        );
+                }
+
+
+                const currentLength =
+                    questionInput.value.length;
+
+
+                const remaining =
+                    Math.max(
+                        0,
+                        MAX_QUESTION_LENGTH
+                        - currentLength
+                    );
+
+
+                charCounter.textContent =
+                    `${remaining}자 남음`;
+            }
+        );
 
 
         // -----------------------------------------------------------
         // Enter 키로 메시지 전송
         // -----------------------------------------------------------
-        document
-            .getElementById('question')
-            .addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
+        questionInput.addEventListener(
+            'keydown',
+            (event) => {
+
+                if (
+                    event.key === 'Enter'
+                ) {
+
                     event.preventDefault();
+
                     sendMsg();
                 }
-            });
+            }
+        );
 
 
         // -----------------------------------------------------------
         // 로그아웃
+        //
+        // 현재 애플리케이션의 인증 정보만 삭제하고
+        // 로그인 페이지로 이동합니다.
         // -----------------------------------------------------------
         function logout() {
-            localStorage.clear();
-            window.location.href = '/login';
+
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+
+            window.location.replace('/login');
         }
 
 
         // -----------------------------------------------------------
         // Timestamp 파싱
         //
-        // models.py에서 datetime.utcnow()을 사용하기 때문에
-        // DB의 created_at은 UTC 기준입니다.
+        // DB의 created_at은 datetime.utcnow() 기반이므로 UTC입니다.
         //
-        // Python의 isoformat() 결과는 보통:
-        // 2026-08-15T06:01:30.123456
-        //
-        // 처럼 timezone 정보가 없는 문자열이므로,
-        // 끝에 Z를 붙여 JavaScript가 UTC로 인식하도록 합니다.
-        //
-        // 이후 화면에서는 Asia/Seoul(KST)로 변환합니다.
+        // Python isoformat()이 timezone 없는 문자열을 반환하는 경우
+        // 끝에 Z를 추가해서 JavaScript가 UTC로 해석하도록 합니다.
         // -----------------------------------------------------------
         function parseTimestamp(timestamp) {
 
@@ -291,8 +408,10 @@
                 return null;
             }
 
-            // 브라우저에서 직접 생성한 Date 객체
-            if (timestamp instanceof Date) {
+
+            if (
+                timestamp instanceof Date
+            ) {
                 return timestamp;
             }
 
@@ -301,27 +420,31 @@
                 String(timestamp);
 
 
-            // 이미 timezone 정보가 있는 경우는 그대로 사용
-            //
-            // 예:
-            // 2026-08-15T06:01:00Z
-            // 2026-08-15T15:01:00+09:00
-            //
-            // timezone 정보가 없으면 UTC라는 의미로 Z 추가
             if (
                 !normalizedTimestamp.endsWith('Z')
-                && !/[+-]\d{2}:\d{2}$/.test(normalizedTimestamp)
+                &&
+                !/[+-]\d{2}:\d{2}$/.test(
+                    normalizedTimestamp
+                )
             ) {
+
                 normalizedTimestamp =
                     `${normalizedTimestamp}Z`;
             }
 
 
             const date =
-                new Date(normalizedTimestamp);
+                new Date(
+                    normalizedTimestamp
+                );
 
 
-            if (Number.isNaN(date.getTime())) {
+            if (
+                Number.isNaN(
+                    date.getTime()
+                )
+            ) {
+
                 return null;
             }
 
@@ -331,18 +454,21 @@
 
 
         // -----------------------------------------------------------
-        // Timestamp 표시 형식 변환
+        // 메시지 시간 표시
         //
-        // 모든 메시지를 KST 기준 HH:MM으로 표시
+        // UTC → KST
         //
         // 예:
-        // UTC 06:01
-        // → KST 15:01
+        // 06:01 UTC
+        // ↓
+        // 15:01 KST
         // -----------------------------------------------------------
         function formatTimestamp(timestamp) {
 
             const date =
-                parseTimestamp(timestamp);
+                parseTimestamp(
+                    timestamp
+                );
 
 
             if (!date) {
@@ -353,27 +479,34 @@
             return date.toLocaleTimeString(
                 'ko-KR',
                 {
-                    timeZone: DISPLAY_TIME_ZONE,
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
+                    timeZone:
+                        DISPLAY_TIME_ZONE,
+
+                    hour:
+                        '2-digit',
+
+                    minute:
+                        '2-digit',
+
+                    hour12:
+                        false
                 }
             );
         }
 
 
         // -----------------------------------------------------------
-        // 날짜 비교용 Key 생성
+        // 날짜 비교용 Key
         //
-        // 반드시 KST 기준 날짜로 계산
-        //
-        // 예:
+        // KST 기준:
         // 2026-08-15
         // -----------------------------------------------------------
         function getDateKey(timestamp) {
 
             const date =
-                parseTimestamp(timestamp);
+                parseTimestamp(
+                    timestamp
+                );
 
 
             if (!date) {
@@ -385,49 +518,71 @@
                 new Intl.DateTimeFormat(
                     'en-CA',
                     {
-                        timeZone: DISPLAY_TIME_ZONE,
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit'
+                        timeZone:
+                            DISPLAY_TIME_ZONE,
+
+                        year:
+                            'numeric',
+
+                        month:
+                            '2-digit',
+
+                        day:
+                            '2-digit'
                     }
-                ).formatToParts(date);
+                ).formatToParts(
+                    date
+                );
 
 
             const year =
                 parts.find(
-                    part => part.type === 'year'
+                    part =>
+                        part.type === 'year'
                 )?.value;
+
 
             const month =
                 parts.find(
-                    part => part.type === 'month'
+                    part =>
+                        part.type === 'month'
                 )?.value;
+
 
             const day =
                 parts.find(
-                    part => part.type === 'day'
+                    part =>
+                        part.type === 'day'
                 )?.value;
 
 
-            if (!year || !month || !day) {
+            if (
+                !year
+                || !month
+                || !day
+            ) {
                 return '';
             }
 
 
-            return `${year}-${month}-${day}`;
+            return (
+                `${year}-${month}-${day}`
+            );
         }
 
 
         // -----------------------------------------------------------
-        // 날짜 표시용 문자열 생성
+        // 날짜 표시 문자열
         //
-        // KST 기준으로:
+        // 예:
         // 2026년 8월 15일
         // -----------------------------------------------------------
         function formatDate(timestamp) {
 
             const date =
-                parseTimestamp(timestamp);
+                parseTimestamp(
+                    timestamp
+                );
 
 
             if (!date) {
@@ -438,22 +593,31 @@
             return date.toLocaleDateString(
                 'ko-KR',
                 {
-                    timeZone: DISPLAY_TIME_ZONE,
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
+                    timeZone:
+                        DISPLAY_TIME_ZONE,
+
+                    year:
+                        'numeric',
+
+                    month:
+                        'long',
+
+                    day:
+                        'numeric'
                 }
             );
         }
 
 
         // -----------------------------------------------------------
-        // 날짜가 바뀌었을 때만 날짜 구분선 추가
+        // 날짜가 변경되었을 때만 날짜 구분선 추가
         // -----------------------------------------------------------
         function appendDateSeparator(timestamp) {
 
             const dateKey =
-                getDateKey(timestamp);
+                getDateKey(
+                    timestamp
+                );
 
 
             if (!dateKey) {
@@ -461,19 +625,25 @@
             }
 
 
-            // 이전에 표시한 날짜와 같으면
-            // 같은 날짜 구분선을 반복해서 만들지 않음
-            if (dateKey === lastDisplayedDate) {
+            if (
+                dateKey
+                === lastDisplayedDate
+            ) {
+
                 return;
             }
 
 
             const box =
-                document.getElementById('chat-box');
+                document.getElementById(
+                    'chat-box'
+                );
 
 
             const separator =
-                document.createElement('div');
+                document.createElement(
+                    'div'
+                );
 
 
             separator.classList.add(
@@ -481,12 +651,15 @@
             );
 
 
-            // textContent 사용
             separator.textContent =
-                formatDate(timestamp);
+                formatDate(
+                    timestamp
+                );
 
 
-            box.appendChild(separator);
+            box.appendChild(
+                separator
+            );
 
 
             lastDisplayedDate =
@@ -497,11 +670,10 @@
         // -----------------------------------------------------------
         // 메시지를 안전하게 DOM에 추가
         //
-        // innerHTML을 사용하지 않고 textContent를 사용하여
-        // 사용자 입력 또는 AI 응답이 HTML로 실행되는 것을 방지
+        // innerHTML을 사용하지 않고 textContent를 사용합니다.
         //
-        // 날짜 변경 시 날짜 구분선 추가
-        // 각 메시지에는 KST 기준 HH:MM 표시
+        // 사용자 입력이나 AI 응답이 HTML/JavaScript 코드로
+        // 실행되지 않고 일반 문자열로 표시됩니다.
         // -----------------------------------------------------------
         function appendMessage(
             role,
@@ -511,22 +683,29 @@
         ) {
 
             const box =
-                document.getElementById('chat-box');
+                document.getElementById(
+                    'chat-box'
+                );
 
 
-            // 메시지를 추가하기 전에
-            // 날짜가 변경되었는지 확인
-            appendDateSeparator(timestamp);
+            appendDateSeparator(
+                timestamp
+            );
 
 
             const messageDiv =
-                document.createElement('div');
+                document.createElement(
+                    'div'
+                );
 
 
-            messageDiv.classList.add('msg');
+            messageDiv.classList.add(
+                'msg'
+            );
 
 
             if (isError) {
+
                 messageDiv.classList.add(
                     'error-msg'
                 );
@@ -534,19 +713,31 @@
 
 
             const label =
-                document.createElement('span');
+                document.createElement(
+                    'span'
+                );
 
 
-            if (role === 'user') {
+            if (
+                role === 'user'
+            ) {
 
-                label.classList.add('user');
+                label.classList.add(
+                    'user'
+                );
+
 
                 label.textContent =
-                    `${currentUsername || '사용자'}: `;
+                    `${
+                        currentUsername
+                        || '사용자'
+                    }: `;
 
             } else {
 
-                label.classList.add('bot');
+                label.classList.add(
+                    'bot'
+                );
 
 
                 if (isError) {
@@ -563,33 +754,47 @@
 
 
             const messageText =
-                document.createElement('span');
+                document.createElement(
+                    'span'
+                );
 
 
             // -------------------------------------------------------
-            // 핵심 보안 부분
+            // 핵심 XSS 방어
             //
-            // HTML을 해석하지 않고 일반 문자열로 출력
+            // HTML로 해석하지 않고 문자열 그대로 출력
             // -------------------------------------------------------
             messageText.textContent =
-                String(message ?? '');
+                String(
+                    message ?? ''
+                );
 
 
-            messageDiv.appendChild(label);
-            messageDiv.appendChild(messageText);
+            messageDiv.appendChild(
+                label
+            );
+
+
+            messageDiv.appendChild(
+                messageText
+            );
 
 
             // -------------------------------------------------------
-            // KST Timestamp 추가
+            // Timestamp 표시
             // -------------------------------------------------------
             const formattedTime =
-                formatTimestamp(timestamp);
+                formatTimestamp(
+                    timestamp
+                );
 
 
             if (formattedTime) {
 
                 const timeSpan =
-                    document.createElement('span');
+                    document.createElement(
+                        'span'
+                    );
 
 
                 timeSpan.classList.add(
@@ -607,14 +812,23 @@
             }
 
 
-            box.appendChild(messageDiv);
+            box.appendChild(
+                messageDiv
+            );
         }
 
 
         // -----------------------------------------------------------
         // 기존 대화 이력 조회
+        //
+        // GET /api/me/chats
         // -----------------------------------------------------------
         async function loadChatHistory() {
+
+            if (!checkAuthentication()) {
+                return;
+            }
+
 
             try {
 
@@ -623,15 +837,17 @@
                         '/api/me/chats',
                         {
                             headers: {
+
                                 'Authorization':
-                                    `Bearer ${token}`
+                                    `Bearer ${getToken()}`
                             }
                         }
                     );
 
 
-                // JWT 만료 또는 인증 실패
-                if (res.status === 401) {
+                if (
+                    res.status === 401
+                ) {
 
                     logout();
 
@@ -657,43 +873,32 @@
                     );
 
 
-                // 기존 메시지 제거
                 box.replaceChildren();
 
 
-                // 날짜 구분 기준 초기화
-                lastDisplayedDate = null;
+                lastDisplayedDate =
+                    null;
 
 
-                logs.forEach((log) => {
+                logs.forEach(
+                    (log) => {
 
-                    // ------------------------------------------------
-                    // 하나의 ChatLog는
-                    //
-                    // question
-                    // response
-                    // created_at
-                    //
-                    // 한 세트이므로 질문과 응답에 같은
-                    // DB timestamp를 사용합니다.
-                    // ------------------------------------------------
-
-                    appendMessage(
-                        'user',
-                        log.question,
-                        false,
-                        log.time
-                    );
+                        appendMessage(
+                            'user',
+                            log.question,
+                            false,
+                            log.time
+                        );
 
 
-                    appendMessage(
-                        'bot',
-                        log.response,
-                        false,
-                        log.time
-                    );
-
-                });
+                        appendMessage(
+                            'bot',
+                            log.response,
+                            false,
+                            log.time
+                        );
+                    }
+                );
 
 
                 box.scrollTop =
@@ -713,10 +918,14 @@
         // -----------------------------------------------------------
         // 대화 기록 전체 삭제
         //
-        // 삭제 전 사용자에게 복구할 수 없음을 경고하고,
-        // 확인한 경우에만 DELETE API 호출
+        // DELETE /api/me/chats
         // -----------------------------------------------------------
         async function clearChatHistory() {
+
+            if (!checkAuthentication()) {
+                return;
+            }
+
 
             const confirmed =
                 confirm(
@@ -724,7 +933,6 @@
                 );
 
 
-            // 사용자가 취소한 경우 아무 작업도 하지 않음
             if (!confirmed) {
                 return;
             }
@@ -736,7 +944,9 @@
                 );
 
 
-            clearBtn.disabled = true;
+            clearBtn.disabled =
+                true;
+
 
             clearBtn.innerText =
                 '삭제 중...';
@@ -748,22 +958,26 @@
                     await fetch(
                         '/api/me/chats',
                         {
-                            method: 'DELETE',
+                            method:
+                                'DELETE',
 
                             headers: {
+
                                 'Authorization':
-                                    `Bearer ${token}`
+                                    `Bearer ${getToken()}`
                             }
                         }
                     );
 
 
-                // JWT 만료 또는 인증 실패
-                if (res.status === 401) {
+                if (
+                    res.status === 401
+                ) {
 
                     alert(
                         '로그인이 만료되었습니다.'
                     );
+
 
                     logout();
 
@@ -778,14 +992,13 @@
                 if (!res.ok) {
 
                     throw new Error(
-                        data.detail ||
+                        data.detail
+                        ||
                         '대화 기록 삭제에 실패했습니다.'
                     );
                 }
 
 
-                // DB 삭제 성공 후
-                // 현재 화면의 메시지도 제거
                 document
                     .getElementById(
                         'chat-box'
@@ -793,8 +1006,8 @@
                     .replaceChildren();
 
 
-                // 날짜 구분 기준 초기화
-                lastDisplayedDate = null;
+                lastDisplayedDate =
+                    null;
 
 
                 alert(
@@ -811,14 +1024,17 @@
 
 
                 alert(
-                    err.message ||
+                    err.message
+                    ||
                     '대화 기록 삭제 중 오류가 발생했습니다.'
                 );
 
 
             } finally {
 
-                clearBtn.disabled = false;
+                clearBtn.disabled =
+                    false;
+
 
                 clearBtn.innerText =
                     '대화 기록 삭제';
@@ -828,8 +1044,15 @@
 
         // -----------------------------------------------------------
         // 새로운 질문 전송
+        //
+        // POST /api/chat
         // -----------------------------------------------------------
         async function sendMsg() {
+
+            if (!checkAuthentication()) {
+                return;
+            }
+
 
             const input =
                 document.getElementById(
@@ -865,19 +1088,33 @@
 
 
             // -------------------------------------------------------
-            // 중복 전송 방지
-            // -------------------------------------------------------
-            input.disabled = true;
-            btn.disabled = true;
-
-
-            // -------------------------------------------------------
-            // 사용자 질문을 즉시 화면에 표시
+            // 방어적 길이 검증
             //
-            // 브라우저의 Date 객체는 절대 시각을 가지고 있으며
-            // formatTimestamp / formatDate에서
-            // Asia/Seoul 기준으로 표시합니다.
+            // HTML maxlength와 별개로
+            // JavaScript에서도 500자를 초과하지 않도록 확인합니다.
             // -------------------------------------------------------
+            if (
+                question.length
+                > MAX_QUESTION_LENGTH
+            ) {
+
+                alert(
+                    '질문은 최대 500자까지 입력할 수 있습니다.'
+                );
+
+                return;
+            }
+
+
+            // 중복 요청 방지
+            input.disabled =
+                true;
+
+            btn.disabled =
+                true;
+
+
+            // 사용자 메시지를 먼저 화면에 표시
             const userTimestamp =
                 new Date();
 
@@ -893,8 +1130,6 @@
             input.value = '';
 
 
-            // 입력값 초기화 후
-            // 글자 수 counter도 다시 500자로 초기화
             charCounter.textContent =
                 `${MAX_QUESTION_LENGTH}자 남음`;
 
@@ -909,29 +1144,37 @@
                     await fetch(
                         '/api/chat',
                         {
-                            method: 'POST',
+                            method:
+                                'POST',
 
                             headers: {
+
                                 'Content-Type':
                                     'application/json',
 
                                 'Authorization':
-                                    `Bearer ${token}`
+                                    `Bearer ${getToken()}`
                             },
 
-                            body: JSON.stringify({
-                                question: question
-                            })
+                            body:
+                                JSON.stringify(
+                                    {
+                                        question:
+                                            question
+                                    }
+                                )
                         }
                     );
 
 
-                // JWT 만료 또는 인증 실패
-                if (res.status === 401) {
+                if (
+                    res.status === 401
+                ) {
 
                     alert(
                         '로그인이 만료되었습니다.'
                     );
+
 
                     logout();
 
@@ -943,9 +1186,6 @@
                     await res.json();
 
 
-                // ---------------------------------------------------
-                // FastAPI 오류 응답
-                // ---------------------------------------------------
                 if (!res.ok) {
 
                     let errorMessage =
@@ -982,13 +1222,7 @@
                 }
 
 
-                // ---------------------------------------------------
                 // 정상 AI 응답
-                //
-                // main.py에서 반환한
-                // DB created_at(UTC)을 받아서
-                // 화면에서는 KST로 변환합니다.
-                // ---------------------------------------------------
                 appendMessage(
                     'bot',
                     data.response,
@@ -1015,15 +1249,22 @@
 
             } finally {
 
-                input.disabled = false;
-                btn.disabled = false;
+                input.disabled =
+                    false;
+
+
+                btn.disabled =
+                    false;
+
 
                 input.focus();
+
 
                 box.scrollTop =
                     box.scrollHeight;
             }
         }
+
     </script>
 
 </body>

@@ -17,7 +17,7 @@ Web UI
 → Railway Deployment
 ```
 
-현재 PoC는 로컬 환경뿐 아니라 **Railway를 통한 외부 네트워크 배포까지 완료**했으며, 인증, AI 호출, DB 저장, 사용자별 로그 조회/삭제, 입력 검증, 예외 처리, DB 영속성 및 안전한 DOM 렌더링을 배포 환경에서 검증했습니다.
+현재 PoC는 로컬 환경뿐 아니라 **Railway를 통한 외부 네트워크 배포까지 완료**했으며, 인증, AI 호출, DB 저장, 사용자별 로그 조회/삭제, 입력 검증, 예외 처리, DB 영속성, 대화 시간 표시 및 안전한 DOM 렌더링을 배포 환경에서 검증했습니다.
 
 > ⚠️ **현재 단계 안내**
 >
@@ -82,6 +82,8 @@ SQLite DB 저장
   ↓
 사용자별 대화 이력 조회 / 삭제
   ↓
+KST 기준 날짜 / 시간 표시
+  ↓
 웹 화면 출력
 ```
 
@@ -101,13 +103,16 @@ SQLite DB 저장
 3. 회원가입 후 로그인한다.
 4. 서버가 로그인 성공 시 JWT Access Token을 발급한다.
 5. 사용자가 챗봇 화면에서 질문을 입력한다.
-6. FastAPI 서버가 JWT를 검증하여 로그인 사용자를 확인한다.
-7. 입력값을 검증하고 해당 사용자의 최근 대화 기록을 조회한다.
-8. 최근 대화를 Context로 구성하여 OpenAI API를 호출한다.
-9. GPT-5 nano의 응답을 사용자에게 반환한다.
-10. 질문과 AI 응답을 SQLite DB에 저장한다.
-11. 사용자는 자신의 기존 대화 기록을 다시 조회할 수 있다.
-12. 필요한 경우 삭제 확인 후 자신의 전체 대화 기록을 삭제할 수 있다.
+6. 입력창 하단에서 500자 기준 남은 입력 가능 글자 수를 확인할 수 있다.
+7. FastAPI 서버가 JWT를 검증하여 로그인 사용자를 확인한다.
+8. 입력값을 검증하고 해당 사용자의 최근 대화 기록을 조회한다.
+9. 최근 대화를 Context로 구성하여 OpenAI API를 호출한다.
+10. GPT-5 nano의 응답을 사용자에게 반환한다.
+11. 질문과 AI 응답을 SQLite DB에 저장한다.
+12. 저장된 생성 시각을 기반으로 메시지의 날짜와 시간을 화면에 표시한다.
+13. 날짜가 변경되면 날짜 구분선을 표시한다.
+14. 사용자는 자신의 기존 대화 기록을 다시 조회할 수 있다.
+15. 필요한 경우 삭제 확인 후 자신의 전체 대화 기록을 삭제할 수 있다.
 ```
 
 ---
@@ -129,18 +134,22 @@ SQLite DB 저장
 13. 사용자 자신의 전체 대화 이력 삭제
 14. 삭제 전 되돌릴 수 없음을 알리는 확인 절차
 15. 공백 입력 및 500자 초과 입력 검증
-16. AI API 하드 타임아웃
-17. 최대 3회 AI 호출 시도
-18. Exponential Backoff 기반 재시도
-19. AI API 실패 시 사용자 오류 안내
-20. DB 저장 실패 시 `rollback()`
-21. 주요 처리 단계 서버 로깅
-22. UUID 기반 `request_id` 요청 추적
-23. 사용자 질문 원문을 서버 요청 로그에서 제외
-24. `textContent` 기반 안전한 DOM 렌더링
-25. Railway 외부 배포
-26. Railway Volume을 통한 SQLite DB 영속성 확보
-27. 재배포 이후 사용자 및 대화 기록 유지 검증
+16. 입력창 500자 제한 및 실시간 남은 글자 수 표시
+17. 메시지별 `HH:MM` 시간 표시
+18. 날짜 변경 시 `YYYY년 M월 D일` 날짜 구분선 표시
+19. DB UTC 시간의 KST(`Asia/Seoul`) 화면 변환
+20. AI API 하드 타임아웃
+21. 최대 3회 AI 호출 시도
+22. Exponential Backoff 기반 재시도
+23. AI API 실패 시 사용자 오류 안내
+24. DB 저장 실패 시 `rollback()`
+25. 주요 처리 단계 서버 로깅
+26. UUID 기반 `request_id` 요청 추적
+27. 사용자 질문 원문을 서버 요청 로그에서 제외
+28. `textContent` 기반 안전한 DOM 렌더링
+29. Railway 외부 배포
+30. Railway Volume을 통한 SQLite DB 영속성 확보
+31. 재배포 이후 사용자 및 대화 기록 유지 검증
 
 ---
 
@@ -163,6 +172,7 @@ https://term-project-proto-production.up.railway.app
 → 로그인
 → 챗봇 질문
 → AI 응답
+→ 날짜 / 시간 표시
 → 대화 이력 확인
 → 대화 기록 삭제
 ```
@@ -404,7 +414,7 @@ Yes     No
        Retry
 ```
 
-무료/제한된 API 환경이나 외부 AI 서비스의 응답 지연 가능성을 고려하여, 일정 시간 이상 응답이 없으면 요청을 종료하고 재시도 또는 오류 안내를 수행합니다.
+외부 AI 서비스의 응답 지연 가능성을 고려하여 일정 시간 이상 응답이 없으면 해당 시도를 종료하고 재시도 또는 오류 안내를 수행합니다.
 
 ---
 
@@ -532,7 +542,112 @@ chat_history_delete_failed
 
 ---
 
-## Step 13. request_id 기반 로그 추적
+## Step 13. 채팅 입력 길이 표시
+
+백엔드에서는 Pydantic을 통해 질문을 최대 500자로 제한합니다.
+
+```python
+question: str = Field(
+    ...,
+    min_length=1,
+    max_length=500
+)
+```
+
+프론트엔드에서도 동일한 제한을 적용합니다.
+
+```html
+<input
+    type="text"
+    id="question"
+    maxlength="500"
+>
+```
+
+사용자가 입력할 때마다 현재 입력 길이를 계산하여 남은 글자 수를 실시간으로 표시합니다.
+
+```text
+500자 남음
+499자 남음
+498자 남음
+...
+0자 남음
+```
+
+따라서 프론트엔드 UX와 백엔드 검증이 모두 동일한 500자 기준을 사용합니다.
+
+---
+
+## Step 14. 메시지 날짜 및 시간 표시
+
+각 `ChatLog`에는 `created_at`이 저장됩니다.
+
+```text
+ChatLog
+├── id
+├── user_id
+├── question
+├── response
+└── created_at
+```
+
+`GET /api/me/chats` 및 `POST /api/chat` 응답을 통해 생성 시각을 프론트엔드에 전달합니다.
+
+하나의 `ChatLog`는 하나의 사용자 질문과 하나의 AI 응답을 하나의 대화 단위로 저장하므로, 저장된 대화 이력을 출력할 때 질문과 응답은 동일한 `created_at`을 사용합니다.
+
+화면에서는 각 메시지 옆에 시간을 표시합니다.
+
+```text
+사용자: 안녕                    15:01
+챗봇: 안녕하세요!               15:01
+```
+
+날짜가 변경되면 새로운 날짜 구분선을 추가합니다.
+
+```text
+──────── 2026년 8월 14일 ────────
+
+사용자: 안녕                    23:41
+챗봇: 안녕하세요!               23:41
+
+──────── 2026년 8월 15일 ────────
+
+사용자: 오늘 뭐했지?             15:01
+챗봇: 이전 대화를 기준으로...     15:01
+```
+
+같은 날짜의 메시지가 계속되는 경우 날짜 구분선을 반복해서 출력하지 않습니다.
+
+---
+
+## Step 15. UTC → KST 시간 변환
+
+DB의 `created_at`은 `datetime.utcnow()`을 기반으로 생성되므로 UTC 기준 시간을 저장합니다.
+
+예:
+
+```text
+DB / API
+2026-08-15T06:01:00
+```
+
+프론트엔드에서는 timezone 정보가 없는 DB timestamp를 UTC로 해석한 뒤 `Asia/Seoul` timezone을 적용합니다.
+
+```text
+UTC 06:01
+   ↓
+Asia/Seoul
+   ↓
+KST 15:01
+```
+
+따라서 사용자 질문을 브라우저에서 즉시 표시하는 시간과 DB에서 다시 불러온 AI 응답 시간이 서로 9시간 차이나는 문제를 방지합니다.
+
+날짜 구분선 역시 KST 기준으로 계산하기 때문에 한국 시간 자정 전후의 대화도 올바른 날짜로 구분됩니다.
+
+---
+
+## Step 16. request_id 기반 로그 추적
 
 각 `/api/chat` 요청에는 UUID 기반 `request_id`가 생성됩니다.
 
@@ -573,7 +688,7 @@ question_length
 
 ---
 
-## Step 14. 안전한 DOM 렌더링
+## Step 17. 안전한 DOM 렌더링
 
 `chat.html`에서는 사용자 질문과 AI 응답을 출력할 때 외부 문자열을 `innerHTML`로 직접 삽입하지 않습니다.
 
@@ -611,6 +726,7 @@ messageText.textContent = String(message ?? '');
 │                              │
 │ HTML / CSS / JavaScript      │
 │ login / register / chat      │
+│ KST Time Display             │
 └──────────────┬───────────────┘
                │
                │ HTTPS / REST API
@@ -671,14 +787,14 @@ messageText.textContent = String(message ?? '');
 
 | 파일 / 디렉터리 | 역할 |
 | --- | --- |
-| `main.py` | FastAPI 앱, 페이지/API 라우팅, 입력 검증, JWT 인증 연결, `request_id` 생성, DB 저장/조회/삭제, 서버 로깅 |
+| `main.py` | FastAPI 앱, 페이지/API 라우팅, 입력 검증, JWT 인증 연결, `request_id` 생성, DB 저장/조회/삭제, 생성 시각 반환, 서버 로깅 |
 | `auth.py` | PBKDF2 비밀번호 해싱, JWT 생성 및 인증 사용자 조회 |
 | `ai_service.py` | OpenAI API, GPT-5 nano 호출, Context 구성, Timeout, Retry, Exponential Backoff, AI 예외 처리 |
 | `database.py` | SQLite / SQLAlchemy 엔진 및 DB 세션 관리 |
-| `models.py` | `User`, `ChatLog` ORM 모델 |
+| `models.py` | `User`, `ChatLog` ORM 모델 및 `created_at` 관리 |
 | `templates/login.html` | 로그인 UI, Enter 제출, 로그인 오류 처리 |
 | `templates/register.html` | 회원가입 UI, 비밀번호 확인, Enter 제출, 검증 오류 처리 |
-| `templates/chat.html` | 챗봇 UI, 대화 이력 출력/삭제, 안전한 DOM 렌더링 |
+| `templates/chat.html` | 챗봇 UI, 500자 입력 제한/카운터, 대화 이력 출력/삭제, 날짜 구분선, KST 시간 표시, 안전한 DOM 렌더링 |
 | `tests/` | 입력 검증 자동화 테스트 |
 
 ---
@@ -780,9 +896,12 @@ Response:
 ```json
 {
   "question": "FastAPI의 장점이 뭐야?",
-  "response": "FastAPI는 비동기 처리와 Pydantic 기반 입력 검증 등을 지원합니다."
+  "response": "FastAPI는 비동기 처리와 Pydantic 기반 입력 검증 등을 지원합니다.",
+  "time": "2026-08-15T06:01:30.123456"
 }
 ```
+
+`time`은 저장된 `ChatLog.created_at`을 ISO 형식으로 반환한 값이며, 웹 화면에서는 이를 KST 기준으로 변환하여 표시합니다.
 
 인증 정보가 없는 경우:
 
@@ -824,12 +943,14 @@ Response:
     "id": 1,
     "question": "FastAPI의 장점이 뭐야?",
     "response": "FastAPI는 비동기 처리 지원...",
-    "time": "2026-08-14T09:47:35"
+    "time": "2026-08-15T06:01:30.123456"
   }
 ]
 ```
 
 현재 로그인한 사용자 자신의 대화 기록만 반환합니다.
+
+`time`은 DB에 저장된 생성 시각이며, 프론트엔드에서는 `Asia/Seoul` 기준으로 변환하여 날짜 구분선과 메시지 시간을 표시합니다.
 
 ---
 
@@ -923,15 +1044,17 @@ SQLite + SQLAlchemy ORM을 사용합니다.
 
 따라서 사용자 기준으로 대화 이력을 조회하고 추적할 수 있습니다.
 
+`created_at`은 대화 생성 시각을 기록하며 API를 통해 프론트엔드로 전달되어 메시지 날짜 및 시간 표시에도 사용됩니다.
+
 ---
 
 # 9. DB 영속성
 
 Railway 배포 환경에서 SQLite DB를 영속적으로 유지하기 위해 Persistent Volume을 사용합니다.
 
+```text
 Railway:
 
-```text
 DATABASE_URL
       ↓
 sqlite:////data/chatbot.db
@@ -960,7 +1083,7 @@ Railway Persistent Volume
 
 # 10. 입력 검증
 
-챗봇 질문에는 서버 사이드 입력 검증을 적용했습니다.
+챗봇 질문에는 클라이언트 및 서버 사이드 입력 검증을 적용했습니다.
 
 ## 10.1 공백 입력
 
@@ -986,7 +1109,7 @@ Value error, 질문은 공백일 수 없습니다.
 
 ## 10.2 최대 길이
 
-질문 최대 길이는 500자입니다.
+질문 최대 길이는 **500자**입니다.
 
 501자를 전달한 경우:
 
@@ -1004,9 +1127,100 @@ String should have at most 500 characters
 
 ---
 
-# 11. 운영 안정성 및 예외 처리
+## 10.3 실시간 남은 글자 수
 
-## 11.1 AI Timeout
+웹 UI에서는 `maxlength="500"`을 적용하고 현재 입력된 글자 수를 기반으로 남은 입력 가능 글자 수를 표시합니다.
+
+```text
+질문 입력 전
+500자 남음
+
+100자 입력
+400자 남음
+
+500자 입력
+0자 남음
+```
+
+이 기능은 사용자 편의를 위한 프론트엔드 UX이며, 실제 보안 및 입력 제한은 FastAPI의 Pydantic 검증에서도 다시 수행됩니다.
+
+---
+
+# 11. 메시지 날짜 및 시간
+
+## 11.1 생성 시각 저장
+
+`ChatLog` 생성 시 `created_at` 필드에 생성 시각을 저장합니다.
+
+```text
+사용자 질문
+   ↓
+AI 응답
+   ↓
+ChatLog
+   ├── question
+   ├── response
+   └── created_at
+```
+
+---
+
+## 11.2 메시지 시간 표시
+
+화면에서는 각 메시지 옆에 `HH:MM` 형식으로 시간을 표시합니다.
+
+```text
+사용자: 안녕                     15:01
+챗봇: 안녕하세요!                15:01
+```
+
+기존 DB 이력을 다시 불러온 경우 질문과 해당 AI 응답은 같은 `ChatLog`에 속하므로 동일한 `created_at`을 사용합니다.
+
+---
+
+## 11.3 날짜 구분선
+
+날짜가 변경되는 지점에만 날짜 구분선을 표시합니다.
+
+```text
+──────── 2026년 8월 14일 ────────
+
+사용자: 안녕                     23:41
+챗봇: 안녕하세요!                23:41
+
+──────── 2026년 8월 15일 ────────
+
+사용자: 오늘 뭐했지?              15:01
+챗봇: 이전 대화를 기준으로...      15:01
+```
+
+같은 날짜에 여러 메시지가 존재하더라도 날짜 구분선은 반복되지 않습니다.
+
+---
+
+## 11.4 KST 변환
+
+DB 생성 시각은 UTC를 기준으로 저장합니다.
+
+프론트엔드에서는 이를 `Asia/Seoul` timezone으로 변환하여 KST로 표시합니다.
+
+```text
+DB:
+2026-08-15 06:01 UTC
+
+        ↓
+
+Web UI:
+2026년 8월 15일 15:01 KST
+```
+
+이를 통해 브라우저에서 즉시 표시한 사용자 메시지와 DB에서 반환된 챗봇 메시지가 서로 다른 시간대로 표시되는 문제를 방지했습니다.
+
+---
+
+# 12. 운영 안정성 및 예외 처리
+
+## 12.1 AI Timeout
 
 OpenAI API 호출에는 명시적인 하드 타임아웃을 적용했습니다.
 
@@ -1028,7 +1242,7 @@ Retry
 
 ---
 
-## 11.2 Exponential Backoff
+## 12.2 Exponential Backoff
 
 ```text
 1차 호출 실패
@@ -1052,7 +1266,7 @@ Retry
 
 ---
 
-## 11.3 DB 실패 처리
+## 12.3 DB 실패 처리
 
 ```text
 db.add()
@@ -1070,7 +1284,7 @@ DB 저장 실패 시 `rollback()`을 실행하여 실패한 트랜잭션 상태�
 
 ---
 
-# 12. 서버 로그
+# 13. 서버 로그
 
 AI 채팅 처리 과정에서 다음과 같은 주요 이벤트를 기록합니다.
 
@@ -1107,9 +1321,9 @@ chat_history_delete_failed
 
 ---
 
-# 13. 대화 로그 확인 및 관리 가이드
+# 14. 대화 로그 확인 및 관리 가이드
 
-## 13.1 웹 화면
+## 14.1 웹 화면
 
 로그인 후 `/chat` 페이지에 접속하면:
 
@@ -1119,13 +1333,15 @@ GET /api/me/chats
 
 를 호출하여 현재 로그인한 사용자의 기존 대화 기록을 화면에 표시합니다.
 
+기존 기록은 날짜별로 구분되며 각 메시지에는 KST 기준 시간이 표시됩니다.
+
 사용자는 대화 기록 삭제 기능을 통해 자신의 대화를 정리할 수 있습니다.
 
 삭제 전에는 복구할 수 없다는 경고를 표시하여 사용자의 확인을 받습니다.
 
 ---
 
-## 13.2 API 조회
+## 14.2 API 조회
 
 로컬:
 
@@ -1145,7 +1361,7 @@ curl \
 
 ---
 
-## 13.3 API 삭제
+## 14.3 API 삭제
 
 ```bash
 curl -i -X DELETE \
@@ -1170,7 +1386,7 @@ curl -i -X DELETE \
 
 ---
 
-# 14. 프론트엔드 메시지 렌더링 보안
+# 15. 프론트엔드 메시지 렌더링 보안
 
 채팅 메시지를 화면에 출력할 때 `innerHTML` 문자열 삽입 대신 DOM API와 `textContent`를 사용합니다.
 
@@ -1179,7 +1395,7 @@ const messageText = document.createElement('span');
 messageText.textContent = String(message ?? '');
 ```
 
-## 14.1 HTML 문자열 테스트
+## 15.1 HTML 문자열 테스트
 
 입력:
 
@@ -1197,7 +1413,7 @@ HTML 제목으로 실행되지 않고 일반 문자열로 표시됩니다.
 
 ---
 
-## 14.2 XSS 형태 입력 테스트
+## 15.2 XSS 형태 입력 테스트
 
 입력:
 
@@ -1217,7 +1433,7 @@ HTML 제목으로 실행되지 않고 일반 문자열로 표시됩니다.
 
 ---
 
-# 15. 환경 변수 및 민감정보 관리
+# 16. 환경 변수 및 민감정보 관리
 
 민감정보는 소스 코드에 직접 작성하지 않습니다.
 
@@ -1234,7 +1450,7 @@ DATABASE_URL
 
 ---
 
-## 15.1 로컬 환경 변수
+## 16.1 로컬 환경 변수
 
 로컬 개발 환경에서는 `.env` 파일을 사용합니다.
 
@@ -1249,7 +1465,7 @@ DATABASE_URL=sqlite:///./chatbot.db
 
 ---
 
-## 15.2 Railway 환경 변수
+## 16.2 Railway 환경 변수
 
 Railway에서는 Variables에 다음 환경 변수를 등록합니다.
 
@@ -1278,7 +1494,7 @@ DATABASE_URL=sqlite:////data/chatbot.db
 
 ---
 
-## 15.3 `.env.example`
+## 16.3 `.env.example`
 
 저장소의 `.env.example`에는 실제 Secret 대신 예시 값을 사용합니다.
 
@@ -1302,7 +1518,7 @@ sqlite:///./chatbot.db
 
 ---
 
-## 15.4 `.gitignore`
+## 16.4 `.gitignore`
 
 예:
 
@@ -1332,9 +1548,9 @@ __pycache__/
 
 ---
 
-# 16. 로컬 실행 방법
+# 17. 로컬 실행 방법
 
-## 16.1 Clone
+## 17.1 Clone
 
 ```bash
 git clone https://github.com/bangahee/term-project-proto.git
@@ -1343,7 +1559,7 @@ cd term-project-proto
 
 ---
 
-## 16.2 가상환경 생성
+## 17.2 가상환경 생성
 
 macOS / Linux:
 
@@ -1361,7 +1577,7 @@ python -m venv .venv
 
 ---
 
-## 16.3 Dependency 설치
+## 17.3 Dependency 설치
 
 ```bash
 pip install -r requirements.txt
@@ -1386,7 +1602,7 @@ pytest
 
 ---
 
-## 16.4 환경 변수 설정
+## 17.4 환경 변수 설정
 
 macOS / Linux:
 
@@ -1407,7 +1623,7 @@ DATABASE_URL=sqlite:///./chatbot.db
 
 ---
 
-## 16.5 테스트
+## 17.5 테스트
 
 ```bash
 pytest -v
@@ -1423,7 +1639,7 @@ tests/test_validation.py::test_question_too_long_rejected PASSED
 
 ---
 
-## 16.6 서버 실행
+## 17.6 서버 실행
 
 ```bash
 uvicorn main:app --reload
@@ -1437,7 +1653,7 @@ http://127.0.0.1:8000
 
 ---
 
-# 17. Railway 배포
+# 18. Railway 배포
 
 현재 서비스는 Railway에서 실행됩니다.
 
@@ -1447,7 +1663,7 @@ http://127.0.0.1:8000
 https://term-project-proto-production.up.railway.app
 ```
 
-## 17.1 배포 환경 변수
+## 18.1 배포 환경 변수
 
 Railway에서 다음 환경 변수를 설정합니다.
 
@@ -1468,7 +1684,7 @@ DATABASE_URL=sqlite:////data/chatbot.db
 
 ---
 
-## 17.2 Persistent Volume
+## 18.2 Persistent Volume
 
 ```text
 FastAPI
@@ -1484,7 +1700,7 @@ Railway Persistent Volume
 
 ---
 
-# 18. Production 검증 결과
+# 19. Production 검증 결과
 
 Railway에 배포한 실제 서비스를 대상으로 다음 기능을 검증했습니다.
 
@@ -1510,6 +1726,11 @@ Railway에 배포한 실제 서비스를 대상으로 다음 기능을 검증했
 | ChatLog DB 저장 | ✅ |
 | 공백 질문 → `422` | ✅ |
 | 501자 질문 → `422` | ✅ |
+| 500자 프론트엔드 입력 제한 | ✅ |
+| 실시간 남은 글자 수 표시 | ✅ |
+| 메시지별 시간 표시 | ✅ |
+| 날짜별 대화 구분선 | ✅ |
+| UTC → KST 화면 변환 | ✅ |
 | HTML 문자열 안전 출력 | ✅ |
 | XSS 형태 입력 실행 방지 | ✅ |
 | Railway 재배포 | ✅ |
@@ -1518,9 +1739,9 @@ Railway에 배포한 실제 서비스를 대상으로 다음 기능을 검증했
 
 ---
 
-# 19. Production 검증 명령어
+# 20. Production 검증 명령어
 
-## 19.1 인증 없는 챗봇 접근
+## 20.1 인증 없는 챗봇 접근
 
 ```bash
 curl -i -X POST \
@@ -1537,7 +1758,7 @@ curl -i -X POST \
 
 ---
 
-## 19.2 인증 없는 로그 조회
+## 20.2 인증 없는 로그 조회
 
 ```bash
 curl -i \
@@ -1552,7 +1773,7 @@ curl -i \
 
 ---
 
-## 19.3 로그인
+## 20.3 로그인
 
 ```bash
 curl -i -X POST \
@@ -1573,7 +1794,7 @@ curl -i -X POST \
 
 ---
 
-## 19.4 JWT 저장
+## 20.4 JWT 저장
 
 ```bash
 TOKEN='<access_token>'
@@ -1581,7 +1802,7 @@ TOKEN='<access_token>'
 
 ---
 
-## 19.5 인증된 로그 조회
+## 20.5 인증된 로그 조회
 
 ```bash
 curl -i \
@@ -1597,7 +1818,7 @@ curl -i \
 
 ---
 
-## 19.6 인증된 챗봇 요청
+## 20.6 인증된 챗봇 요청
 
 ```bash
 curl -i -X POST \
@@ -1613,9 +1834,19 @@ curl -i -X POST \
 200 OK
 ```
 
+응답에는 질문, AI 응답 및 DB 생성 시각이 포함됩니다.
+
+```json
+{
+  "question": "안녕",
+  "response": "안녕하세요!",
+  "time": "2026-08-15T06:01:30.123456"
+}
+```
+
 ---
 
-## 19.7 공백 입력 검증
+## 20.7 공백 입력 검증
 
 ```bash
 curl -i -X POST \
@@ -1633,7 +1864,7 @@ curl -i -X POST \
 
 ---
 
-## 19.8 501자 입력 검증
+## 20.8 501자 입력 검증
 
 ```bash
 curl -i -X POST \
@@ -1651,7 +1882,7 @@ curl -i -X POST \
 
 ---
 
-## 19.9 대화 기록 삭제
+## 20.9 대화 기록 삭제
 
 ```bash
 curl -i -X DELETE \
@@ -1677,7 +1908,7 @@ curl -i \
 
 ---
 
-# 20. 팀 협업 및 역할 분담 계획
+# 21. 팀 협업 및 역할 분담 계획
 
 본 PoC를 팀 프로젝트의 기술적 베이스라인으로 활용할 예정입니다.
 
@@ -1694,7 +1925,7 @@ curl -i \
 
 ---
 
-# 21. Git Branch / PR 전략
+# 22. Git Branch / PR 전략
 
 현재 PoC는 단일 작성자가 `main` 브랜치에서 구현했습니다.
 
@@ -1711,7 +1942,7 @@ main
       └── fix/<bug-name>
 ```
 
-## 21.1 브랜치 역할
+## 22.1 브랜치 역할
 
 | Branch | 역할 |
 | --- | --- |
@@ -1722,7 +1953,7 @@ main
 
 ---
 
-## 21.2 팀 프로젝트 Git 규칙
+## 22.2 팀 프로젝트 Git 규칙
 
 1. `main`과 `develop`에서 직접 기능 개발하지 않습니다.
 2. `develop`에서 기능 브랜치를 생성합니다.
@@ -1750,9 +1981,9 @@ git push origin feat/chat-ui
 
 ---
 
-# 22. 현재 구현 상태
+# 23. 현재 구현 상태
 
-## 22.1 PoC 완료
+## 23.1 PoC 완료
 
 - [x] FastAPI 웹 서버
 - [x] HTML / CSS / JavaScript + Jinja2 Frontend
@@ -1788,6 +2019,14 @@ git push origin feat/chat-ui
 - [x] 클라이언트 입력 검증
 - [x] 서버 공백 입력 검증
 - [x] 500자 최대 길이 검증
+- [x] 500자 프론트엔드 입력 제한
+- [x] 실시간 남은 글자 수 표시
+- [x] ChatLog 생성 시각 저장
+- [x] `/api/chat` 생성 시각 반환
+- [x] `/api/me/chats` 생성 시각 반환
+- [x] 메시지별 `HH:MM` 시간 표시
+- [x] 날짜 변경 시 날짜 구분선 표시
+- [x] UTC → KST(`Asia/Seoul`) 화면 변환
 - [x] Pytest 입력 검증 테스트
 - [x] `textContent` 기반 안전한 메시지 렌더링
 - [x] HTML 형태 입력 안전 출력 검증
@@ -1810,7 +2049,7 @@ git push origin feat/chat-ui
 
 ---
 
-## 22.2 팀 본 프로젝트에서 추가 필요
+## 23.2 팀 본 프로젝트에서 추가 필요
 
 - [ ] `main` / `develop` 브랜치 실제 운영
 - [ ] 기능 단위 작업 브랜치 사용
@@ -1824,7 +2063,7 @@ git push origin feat/chat-ui
 
 ---
 
-# 23. 평가 요구사항 대응 현황
+# 24. 평가 요구사항 대응 현황
 
 | 요구사항 | 현재 상태 |
 | --- | --- |
@@ -1843,6 +2082,11 @@ git push origin feat/chat-ui
 | 생성 시각 저장 | ✅ |
 | 사용자 기준 로그 조회 | ✅ |
 | 사용자 기준 로그 삭제 | ✅ |
+| 500자 입력 제한 | ✅ |
+| 남은 글자 수 표시 | ✅ |
+| 메시지 생성 시각 표시 | ✅ |
+| 날짜별 대화 구분 | ✅ |
+| KST 기준 화면 표시 | ✅ |
 | 요청 수신 로그 | ✅ |
 | AI 호출 로그 | ✅ |
 | AI 성공/실패 로그 | ✅ |
@@ -1867,7 +2111,7 @@ git push origin feat/chat-ui
 
 ---
 
-# 24. 최종 목표
+# 25. 최종 목표
 
 현재 PoC에서는 다음 기술 흐름을 실제 배포 환경까지 연결하여 검증했습니다.
 
@@ -1898,17 +2142,23 @@ AI 응답
   ↓
 SQLite ChatLog 저장
   ↓
+created_at 저장
+  ↓
 Persistent Volume
   ↓
 사용자별 대화 이력 조회 / 삭제
+  ↓
+UTC → KST 변환
+  ↓
+날짜 구분선 + 메시지 시간 표시
   ↓
 안전한 DOM 렌더링
   ↓
 웹 화면 출력
 ```
 
-따라서 현재 PoC에서는 **Web + Authentication + DB + AI API + Context + Logging + Error Handling + Deployment + Persistence**의 핵심 통합 흐름을 구축했습니다.
+따라서 현재 PoC에서는 **Web + Authentication + DB + AI API + Context + Logging + Error Handling + Deployment + Persistence + Time Handling**의 핵심 통합 흐름을 구축했습니다.
 
-또한 회원가입 비밀번호 확인, Enter 키 제출, 대화 기록 삭제, 안전한 DOM 렌더링 등 실제 사용 과정에서 필요한 UX 및 보안 요소를 추가했습니다.
+또한 회원가입 비밀번호 확인, Enter 키 제출, 500자 입력 제한 및 남은 글자 수 표시, 대화 기록 삭제, 날짜별 대화 구분, KST 기준 메시지 시간 표시, 안전한 DOM 렌더링 등 실제 사용 과정에서 필요한 UX 및 보안 요소를 추가했습니다.
 
 다음 단계에서는 이 PoC를 팀 프로젝트의 기술적 베이스라인으로 사용하고, 실제 팀원들과 `develop` 및 기능 브랜치, PR 기반 Merge, 팀원별 Commit 이력을 구축하여 최종 Term Project로 확장하는 것을 목표로 합니다.

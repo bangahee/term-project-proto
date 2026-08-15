@@ -59,6 +59,37 @@
             color: #dc3545;
         }
 
+        .timestamp {
+            margin-left: 8px;
+            font-size: 11px;
+            color: #888;
+            font-weight: normal;
+            white-space: nowrap;
+        }
+
+        .date-separator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 18px 0;
+            color: #777;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .date-separator::before,
+        .date-separator::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: #ddd;
+        }
+
+        .input-wrapper {
+            margin-top: 5px;
+        }
+
         .input-group {
             display: flex;
             gap: 10px;
@@ -69,6 +100,13 @@
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
+        }
+
+        .char-counter {
+            text-align: right;
+            margin-top: 5px;
+            font-size: 12px;
+            color: #777;
         }
 
         button {
@@ -133,22 +171,39 @@
     <div id="chat-box"></div>
 
 
-    <div class="input-group">
-        <input
-            type="text"
-            id="question"
-            placeholder="질문을 입력하세요..."
-        >
+    <div class="input-wrapper">
 
-        <button id="send-btn" onclick="sendMsg()">
-            전송
-        </button>
+        <div class="input-group">
+            <input
+                type="text"
+                id="question"
+                placeholder="질문을 입력하세요..."
+                maxlength="500"
+            >
+
+            <button id="send-btn" onclick="sendMsg()">
+                전송
+            </button>
+        </div>
+
+        <div
+            class="char-counter"
+            id="char-counter"
+        >
+            500자 남음
+        </div>
+
     </div>
 
 
     <script>
         const token = localStorage.getItem('token');
         const currentUsername = localStorage.getItem('username');
+
+        const MAX_QUESTION_LENGTH = 500;
+
+        // 현재 화면에 마지막으로 표시된 날짜
+        let lastDisplayedDate = null;
 
 
         // -----------------------------------------------------------
@@ -165,6 +220,29 @@
                 currentUsername || '사용자';
 
             loadChatHistory();
+        });
+
+
+        // -----------------------------------------------------------
+        // 질문 글자 수 실시간 표시
+        //
+        // Backend의 Pydantic max_length=500과 동일한 기준
+        // -----------------------------------------------------------
+        const questionInput =
+            document.getElementById('question');
+
+        const charCounter =
+            document.getElementById('char-counter');
+
+        questionInput.addEventListener('input', () => {
+            const currentLength =
+                questionInput.value.length;
+
+            const remaining =
+                MAX_QUESTION_LENGTH - currentLength;
+
+            charCounter.textContent =
+                `${remaining}자 남음`;
         });
 
 
@@ -191,44 +269,251 @@
 
 
         // -----------------------------------------------------------
+        // Timestamp 표시 형식 변환
+        //
+        // HH:MM 형식으로 변환
+        // -----------------------------------------------------------
+        function formatTimestamp(timestamp) {
+
+            if (!timestamp) {
+                return '';
+            }
+
+            const date =
+                timestamp instanceof Date
+                    ? timestamp
+                    : new Date(timestamp);
+
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+
+            return date.toLocaleTimeString(
+                'ko-KR',
+                {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                }
+            );
+        }
+
+
+        // -----------------------------------------------------------
+        // 날짜를 비교하기 위한 Key 생성
+        //
+        // 예:
+        // 2026-08-15
+        // -----------------------------------------------------------
+        function getDateKey(timestamp) {
+
+            if (!timestamp) {
+                return '';
+            }
+
+            const date =
+                timestamp instanceof Date
+                    ? timestamp
+                    : new Date(timestamp);
+
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+
+            const year =
+                date.getFullYear();
+
+            const month =
+                String(
+                    date.getMonth() + 1
+                ).padStart(2, '0');
+
+            const day =
+                String(
+                    date.getDate()
+                ).padStart(2, '0');
+
+            return `${year}-${month}-${day}`;
+        }
+
+
+        // -----------------------------------------------------------
+        // 날짜 표시용 문자열 생성
+        //
+        // 예:
+        // 2026년 8월 15일
+        // -----------------------------------------------------------
+        function formatDate(timestamp) {
+
+            if (!timestamp) {
+                return '';
+            }
+
+            const date =
+                timestamp instanceof Date
+                    ? timestamp
+                    : new Date(timestamp);
+
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+
+            return date.toLocaleDateString(
+                'ko-KR',
+                {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                }
+            );
+        }
+
+
+        // -----------------------------------------------------------
+        // 날짜가 바뀌었을 때만 날짜 구분선 추가
+        // -----------------------------------------------------------
+        function appendDateSeparator(timestamp) {
+
+            const dateKey =
+                getDateKey(timestamp);
+
+            if (!dateKey) {
+                return;
+            }
+
+
+            // 이전에 표시한 날짜와 같으면 구분선 추가하지 않음
+            if (dateKey === lastDisplayedDate) {
+                return;
+            }
+
+
+            const box =
+                document.getElementById('chat-box');
+
+
+            const separator =
+                document.createElement('div');
+
+            separator.classList.add(
+                'date-separator'
+            );
+
+
+            separator.textContent =
+                formatDate(timestamp);
+
+
+            box.appendChild(separator);
+
+
+            lastDisplayedDate =
+                dateKey;
+        }
+
+
+        // -----------------------------------------------------------
         // 메시지를 안전하게 DOM에 추가
         //
         // innerHTML을 사용하지 않고 textContent를 사용하여
         // 사용자 입력 또는 AI 응답이 HTML로 실행되는 것을 방지
+        //
+        // 날짜가 바뀐 경우 날짜 구분선 추가
+        // timestamp를 함께 표시
         // -----------------------------------------------------------
-        function appendMessage(role, message, isError = false) {
-            const box = document.getElementById('chat-box');
+        function appendMessage(
+            role,
+            message,
+            isError = false,
+            timestamp = null
+        ) {
+            const box =
+                document.getElementById('chat-box');
 
-            const messageDiv = document.createElement('div');
+
+            // 메시지 추가 전에 날짜 변경 여부 확인
+            appendDateSeparator(timestamp);
+
+
+            const messageDiv =
+                document.createElement('div');
+
             messageDiv.classList.add('msg');
 
+
             if (isError) {
-                messageDiv.classList.add('error-msg');
+                messageDiv.classList.add(
+                    'error-msg'
+                );
             }
 
-            const label = document.createElement('span');
+
+            const label =
+                document.createElement('span');
+
 
             if (role === 'user') {
+
                 label.classList.add('user');
-                label.textContent = `${currentUsername || '사용자'}: `;
+
+                label.textContent =
+                    `${currentUsername || '사용자'}: `;
+
             } else {
+
                 label.classList.add('bot');
 
                 if (isError) {
-                    label.textContent = '오류: ';
+
+                    label.textContent =
+                        '오류: ';
+
                 } else {
-                    label.textContent = '챗봇: ';
+
+                    label.textContent =
+                        '챗봇: ';
                 }
             }
 
-            const messageText = document.createElement('span');
+
+            const messageText =
+                document.createElement('span');
+
 
             // 핵심 보안 부분
             // HTML을 해석하지 않고 일반 문자열로 출력
-            messageText.textContent = String(message ?? '');
+            messageText.textContent =
+                String(message ?? '');
+
 
             messageDiv.appendChild(label);
             messageDiv.appendChild(messageText);
+
+
+            // -------------------------------------------------------
+            // Timestamp 추가
+            // -------------------------------------------------------
+            const formattedTime =
+                formatTimestamp(timestamp);
+
+
+            if (formattedTime) {
+
+                const timeSpan =
+                    document.createElement('span');
+
+                timeSpan.classList.add(
+                    'timestamp'
+                );
+
+                timeSpan.textContent =
+                    formattedTime;
+
+                messageDiv.appendChild(
+                    timeSpan
+                );
+            }
+
 
             box.appendChild(messageDiv);
         }
@@ -238,12 +523,20 @@
         // 기존 대화 이력 조회
         // -----------------------------------------------------------
         async function loadChatHistory() {
+
             try {
-                const res = await fetch('/api/me/chats', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
+
+                const res =
+                    await fetch(
+                        '/api/me/chats',
+                        {
+                            headers: {
+                                'Authorization':
+                                    `Bearer ${token}`
+                            }
+                        }
+                    );
+
 
                 // JWT 만료 또는 인증 실패
                 if (res.status === 401) {
@@ -251,34 +544,66 @@
                     return;
                 }
 
+
                 if (!res.ok) {
+
                     throw new Error(
                         `대화 이력 조회 실패 (${res.status})`
                     );
                 }
 
-                const logs = await res.json();
 
-                const box = document.getElementById('chat-box');
+                const logs =
+                    await res.json();
+
+
+                const box =
+                    document.getElementById(
+                        'chat-box'
+                    );
+
 
                 // 기존 메시지 제거
                 box.replaceChildren();
 
+
+                // 날짜 구분 기준도 초기화
+                lastDisplayedDate = null;
+
+
                 logs.forEach((log) => {
+
+                    // ------------------------------------------------
+                    // 하나의 ChatLog는
+                    // question + response + created_at
+                    // 한 세트이므로
+                    // 질문과 응답에 같은 시간을 사용
+                    // ------------------------------------------------
+
                     appendMessage(
                         'user',
-                        log.question
+                        log.question,
+                        false,
+                        log.time
                     );
+
 
                     appendMessage(
                         'bot',
-                        log.response
+                        log.response,
+                        false,
+                        log.time
                     );
+
                 });
 
-                box.scrollTop = box.scrollHeight;
+
+                box.scrollTop =
+                    box.scrollHeight;
+
 
             } catch (err) {
+
                 console.error(
                     '이력 로드 실패:',
                     err
@@ -294,63 +619,97 @@
         // 확인한 경우에만 DELETE API를 호출합니다.
         // -----------------------------------------------------------
         async function clearChatHistory() {
-            const confirmed = confirm(
-                '저장된 대화 기록을 모두 삭제하시겠습니까?\n\n삭제된 기록은 복구할 수 없습니다.'
-            );
+
+            const confirmed =
+                confirm(
+                    '저장된 대화 기록을 모두 삭제하시겠습니까?\n\n삭제된 기록은 복구할 수 없습니다.'
+                );
+
 
             // 사용자가 취소한 경우 아무 작업도 하지 않음
             if (!confirmed) {
                 return;
             }
 
+
             const clearBtn =
-                document.getElementById('clear-btn');
+                document.getElementById(
+                    'clear-btn'
+                );
+
 
             clearBtn.disabled = true;
-            clearBtn.innerText = '삭제 중...';
+            clearBtn.innerText =
+                '삭제 중...';
+
 
             try {
-                const res = await fetch('/api/me/chats', {
-                    method: 'DELETE',
 
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
+                const res =
+                    await fetch(
+                        '/api/me/chats',
+                        {
+                            method: 'DELETE',
+
+                            headers: {
+                                'Authorization':
+                                    `Bearer ${token}`
+                            }
+                        }
+                    );
 
 
                 // JWT 만료 또는 인증 실패
                 if (res.status === 401) {
-                    alert('로그인이 만료되었습니다.');
+
+                    alert(
+                        '로그인이 만료되었습니다.'
+                    );
+
                     logout();
+
                     return;
                 }
 
 
-                const data = await res.json();
+                const data =
+                    await res.json();
 
 
                 if (!res.ok) {
+
                     throw new Error(
-                        data.detail || '대화 기록 삭제에 실패했습니다.'
+                        data.detail ||
+                        '대화 기록 삭제에 실패했습니다.'
                     );
                 }
 
 
-                // DB 삭제 성공 후 현재 화면의 메시지도 제거
+                // DB 삭제 성공 후
+                // 현재 화면의 메시지도 제거
                 document
-                    .getElementById('chat-box')
+                    .getElementById(
+                        'chat-box'
+                    )
                     .replaceChildren();
 
 
-                alert('대화 기록이 삭제되었습니다.');
+                // 날짜 구분 기준 초기화
+                lastDisplayedDate = null;
+
+
+                alert(
+                    '대화 기록이 삭제되었습니다.'
+                );
 
 
             } catch (err) {
+
                 console.error(
                     '대화 기록 삭제 실패:',
                     err
                 );
+
 
                 alert(
                     err.message ||
@@ -359,8 +718,11 @@
 
 
             } finally {
+
                 clearBtn.disabled = false;
-                clearBtn.innerText = '대화 기록 삭제';
+
+                clearBtn.innerText =
+                    '대화 기록 삭제';
             }
         }
 
@@ -369,106 +731,192 @@
         // 새로운 질문 전송
         // -----------------------------------------------------------
         async function sendMsg() {
-            const input = document.getElementById('question');
-            const btn = document.getElementById('send-btn');
-            const box = document.getElementById('chat-box');
 
-            const question = input.value.trim();
+            const input =
+                document.getElementById(
+                    'question'
+                );
+
+            const btn =
+                document.getElementById(
+                    'send-btn'
+                );
+
+            const box =
+                document.getElementById(
+                    'chat-box'
+                );
+
+
+            const question =
+                input.value.trim();
+
 
             // 빈 질문 차단
             if (!question) {
-                alert('질문을 입력해주세요.');
+
+                alert(
+                    '질문을 입력해주세요.'
+                );
+
                 return;
             }
+
 
             // 중복 전송 방지
             input.disabled = true;
             btn.disabled = true;
 
-            // 사용자 질문 화면에 먼저 표시
+
+            // -------------------------------------------------------
+            // 사용자 질문을 즉시 화면에 표시
+            //
+            // 서버 응답을 기다리는 동안에는
+            // 현재 브라우저 시간을 임시로 사용
+            // -------------------------------------------------------
+            const userTimestamp =
+                new Date();
+
+
             appendMessage(
                 'user',
-                question
+                question,
+                false,
+                userTimestamp
             );
+
 
             input.value = '';
 
-            box.scrollTop = box.scrollHeight;
+
+            // 입력값 초기화 후 남은 글자 수도
+            // 다시 500자로 초기화
+            charCounter.textContent =
+                `${MAX_QUESTION_LENGTH}자 남음`;
+
+
+            box.scrollTop =
+                box.scrollHeight;
 
 
             try {
-                const res = await fetch('/api/chat', {
-                    method: 'POST',
 
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
+                const res =
+                    await fetch(
+                        '/api/chat',
+                        {
+                            method: 'POST',
 
-                    body: JSON.stringify({
-                        question: question
-                    })
-                });
+                            headers: {
+                                'Content-Type':
+                                    'application/json',
+
+                                'Authorization':
+                                    `Bearer ${token}`
+                            },
+
+                            body: JSON.stringify({
+                                question: question
+                            })
+                        }
+                    );
 
 
                 // JWT 만료 또는 인증 실패
                 if (res.status === 401) {
-                    alert('로그인이 만료되었습니다.');
+
+                    alert(
+                        '로그인이 만료되었습니다.'
+                    );
+
                     logout();
+
                     return;
                 }
 
 
-                const data = await res.json();
+                const data =
+                    await res.json();
 
 
+                // ---------------------------------------------------
                 // FastAPI 오류 응답
+                // ---------------------------------------------------
                 if (!res.ok) {
-                    let errorMessage = '요청 처리 실패';
 
-                    if (typeof data.detail === 'string') {
-                        errorMessage = data.detail;
-                    } else if (typeof data.response === 'string') {
-                        errorMessage = data.response;
+                    let errorMessage =
+                        '요청 처리 실패';
+
+
+                    if (
+                        typeof data.detail
+                        === 'string'
+                    ) {
+
+                        errorMessage =
+                            data.detail;
+
+                    } else if (
+                        typeof data.response
+                        === 'string'
+                    ) {
+
+                        errorMessage =
+                            data.response;
                     }
+
 
                     appendMessage(
                         'bot',
                         errorMessage,
-                        true
+                        true,
+                        new Date()
                     );
+
 
                     return;
                 }
 
 
+                // ---------------------------------------------------
                 // 정상 AI 응답
+                //
+                // main.py에서 반환한
+                // DB created_at 값을 사용
+                // ---------------------------------------------------
                 appendMessage(
                     'bot',
-                    data.response
+                    data.response,
+                    false,
+                    data.time
                 );
 
 
             } catch (err) {
+
                 console.error(
                     '채팅 요청 실패:',
                     err
                 );
 
+
                 appendMessage(
                     'bot',
                     '네트워크 연결 실패',
-                    true
+                    true,
+                    new Date()
                 );
 
 
             } finally {
+
                 input.disabled = false;
                 btn.disabled = false;
 
                 input.focus();
 
-                box.scrollTop = box.scrollHeight;
+                box.scrollTop =
+                    box.scrollHeight;
             }
         }
     </script>

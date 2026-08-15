@@ -3,7 +3,7 @@ uvicorn
 sqlalchemy
 pydantic
 python-dotenv
-google-genai
+openai
 httpx
 passlib
 python-jose[cryptography]
